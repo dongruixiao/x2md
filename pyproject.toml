@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "x2md"
+version = "0.1.0"
+description = "Convert documents to Markdown with speed and quality modes."
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+license = { text = "MIT" }
+authors = [{ name = "x2md" }]
+dependencies = [
+    "docling",
+    "fastapi>=0.110",
+    "markitdown[all]>=0.0.1a3",
+    "mineru[pipeline]",
+    "python-multipart>=0.0.9",
+    "pypdf>=4.0",
+    "requests>=2.31",
+    "uvicorn>=0.27",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+docling = [
+]
+mineru = [
+]
+
+[project.scripts]
+x2md = "x2md.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/x2md"]
