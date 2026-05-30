@@ -23,6 +23,9 @@ The experimental RapidDoc engine is optional:
 pip install "x2md[rapiddoc]"
 ```
 
+RapidDoc pins `pdfminer.six`, so install it through the `rapiddoc` extra above
+instead of installing `rapid-doc` into an existing environment by hand.
+
 Optional external tools (auto-detected, only needed for specific formats):
 
 - `ffmpeg` — audio/video transcription

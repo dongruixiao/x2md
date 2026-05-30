@@ -30,7 +30,8 @@ docling = [
 mineru = [
 ]
 rapiddoc = [
-    "rapid-doc[cpu]>=0.9.5",
+    "rapid-doc[cpu]==0.9.5",
+    "pdfplumber==0.11.7",
 ]
 
 [project.scripts]
