@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 import warnings
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import dataclass
 from functools import lru_cache
 from importlib.util import find_spec
@@ -168,6 +169,26 @@ def _write_rapiddoc_resources(images: dict[str, bytes]) -> tuple[tuple[Resource,
         raise
 
 
+@contextmanager
+def _suppress_rapiddoc_logs():
+    try:
+        from loguru import logger
+    except ImportError:
+        logger = None
+
+    if logger is not None:
+        logger.remove()
+
+    with open(os.devnull, "w", encoding="utf-8") as devnull:
+        try:
+            with redirect_stdout(devnull), redirect_stderr(devnull):
+                yield
+        finally:
+            if logger is not None:
+                logger.remove()
+                logger.add(sys.stderr)
+
+
 @lru_cache(maxsize=1)
 def _rapiddoc_converter():
     try:
@@ -179,17 +200,18 @@ def _rapiddoc_converter():
 
 def _convert_file_rapiddoc_result(path: Path, options: BackendOptions) -> ConversionResult:
     try:
-        result = _rapiddoc_converter()(
-            path,
-            lang=options.rapiddoc_lang or options.mineru_lang or "ch",
-            parse_method=options.rapiddoc_parse_method or options.mineru_method or "auto",
-            start_page_id=options.rapiddoc_start if options.rapiddoc_start is not None else options.mineru_start or 0,
-            end_page_id=options.rapiddoc_end if options.rapiddoc_end is not None else options.mineru_end,
-            formula_enable=options.rapiddoc_formula if options.rapiddoc_formula is not None else options.mineru_formula,
-            table_enable=options.rapiddoc_table if options.rapiddoc_table is not None else options.mineru_table,
-            f_dump_middle_json=False,
-            f_dump_content_list=False,
-        )
+        with _suppress_rapiddoc_logs():
+            result = _rapiddoc_converter()(
+                path,
+                lang=options.rapiddoc_lang or options.mineru_lang or "ch",
+                parse_method=options.rapiddoc_parse_method or options.mineru_method or "auto",
+                start_page_id=options.rapiddoc_start if options.rapiddoc_start is not None else options.mineru_start or 0,
+                end_page_id=options.rapiddoc_end if options.rapiddoc_end is not None else options.mineru_end,
+                formula_enable=options.rapiddoc_formula if options.rapiddoc_formula is not None else options.mineru_formula,
+                table_enable=options.rapiddoc_table if options.rapiddoc_table is not None else options.mineru_table,
+                f_dump_middle_json=False,
+                f_dump_content_list=False,
+            )
         text = getattr(result, "markdown", "") or ""
         images = getattr(result, "images", {}) or {}
         resources, cleanup_paths = _write_rapiddoc_resources(images)

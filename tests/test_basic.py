@@ -568,16 +568,19 @@ def test_mineru_backend_requires_cli(tmp_path, monkeypatch):
         convert_file(src, "mineru")
 
 
-def test_rapiddoc_backend_uses_python_api_and_copies_images(tmp_path, monkeypatch):
+def test_rapiddoc_backend_uses_python_api_and_copies_images(tmp_path, monkeypatch, capsys):
     src = tmp_path / "input.pdf"
     src.write_text("pdf", encoding="utf-8")
     calls = []
 
     class FakeRapidDoc:
         def __init__(self, **kwargs):
+            print("rapid init log")
             calls.append(("init", kwargs))
 
         def __call__(self, path, **kwargs):
+            print("rapid call log")
+            print("rapid err log", file=sys.stderr)
             calls.append(("call", path, kwargs))
             return types.SimpleNamespace(
                 markdown="![chart](images/chart.png)",
@@ -617,6 +620,10 @@ def test_rapiddoc_backend_uses_python_api_and_copies_images(tmp_path, monkeypatc
             "f_dump_middle_json": False,
             "f_dump_content_list": False,
         })
+        captured = capsys.readouterr()
+        assert "rapid init log" not in captured.out
+        assert "rapid call log" not in captured.out
+        assert "rapid err log" not in captured.err
     finally:
         for path in result.cleanup_paths:
             if path.is_dir():
