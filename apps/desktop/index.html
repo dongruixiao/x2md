@@ -7,17 +7,104 @@
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
-    <main>
-      <section class="shell">
-        <p class="eyebrow">x2md Desktop</p>
-        <h1>文档转换工具</h1>
-        <p class="copy">桌面壳已就绪。下一步会启动本地 x2md 服务并在此窗口加载转换界面。</p>
-        <div class="status">
-          <span class="dot"></span>
-          <span>等待连接本地服务</span>
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark">x2</div>
+        <div>
+          <strong>x2md</strong>
+          <span>Desktop</span>
+        </div>
+      </div>
+      <div class="service-state" data-state="ready">
+        <span class="pulse"></span>
+        <span id="serviceStatus">桌面壳已启动</span>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="primary-panel">
+        <div class="panel-head">
+          <p class="eyebrow">本地文档转换</p>
+          <h1>拖入文档，转换成 Markdown</h1>
+          <p>下一步会自动连接本机 x2md 服务。当前界面先用于验证桌面体验和打包流程。</p>
+        </div>
+
+        <div class="drop-zone" id="dropZone">
+          <div class="drop-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 3v11m0-11 4 4m-4-4-4 4" />
+              <path d="M5 14v4a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3v-4" />
+            </svg>
+          </div>
+          <strong>选择或拖拽文件</strong>
+          <span>PDF、Word、PPT、Excel、图片等格式</span>
+          <button id="chooseFiles" type="button">选择文件</button>
+        </div>
+
+        <div class="settings-grid">
+          <label>
+            <span>质量</span>
+            <select>
+              <option>标准 balanced</option>
+              <option>快速 fast</option>
+              <option>快速高质量 rapid</option>
+              <option>高质量 best</option>
+            </select>
+          </label>
+          <label>
+            <span>输出目录</span>
+            <button class="field-button" type="button">选择目录</button>
+          </label>
+          <label class="toggle-row">
+            <span>OCR</span>
+            <input type="checkbox" />
+          </label>
+          <label class="toggle-row">
+            <span>覆盖已有输出</span>
+            <input type="checkbox" />
+          </label>
         </div>
       </section>
+
+      <aside class="side-panel">
+        <section class="card">
+          <div class="card-title">
+            <span>引擎</span>
+            <button type="button">检查</button>
+          </div>
+          <ul class="engine-list">
+            <li><span>Fast</span><strong>可用</strong></li>
+            <li><span>Balanced</span><strong>待检测</strong></li>
+            <li><span>Rapid</span><strong>待检测</strong></li>
+            <li><span>Best</span><strong>待检测</strong></li>
+          </ul>
+        </section>
+
+        <section class="card">
+          <div class="card-title">
+            <span>服务</span>
+            <button type="button" id="retryService">重试</button>
+          </div>
+          <div class="service-box">
+            <span class="status-dot"></span>
+            <div>
+              <strong id="serviceTitle">等待本地服务接入</strong>
+              <p id="serviceHint">后续会在这里显示端口、启动状态和错误日志。</p>
+            </div>
+          </div>
+        </section>
+      </aside>
     </main>
+
+    <section class="jobs">
+      <div class="jobs-head">
+        <strong>任务</strong>
+        <span>暂无转换任务</span>
+      </div>
+      <div class="empty-row">本地服务接入后，转换进度会显示在这里。</div>
+    </section>
+
+    <input id="fileInput" type="file" multiple hidden />
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
