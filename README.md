@@ -114,3 +114,9 @@ PDF, DOCX, PPTX, XLSX/XLS, HTML, CSV, JSON, XML, EPUB, ZIP, images (PNG/JPG/…)
 - All paths use `pathlib`; Windows backslashes and non-ASCII paths are handled.
 - Output files are written as UTF-8 with LF line endings on every platform.
 - stdout/stderr are forced to UTF-8 so non-ASCII content prints correctly on Windows.
+
+## Repository layout
+
+- `src/x2md/`: Python CLI, web UI, and conversion core.
+- `apps/desktop/`: desktop shell and packaging work.
+- `docs/architecture/`: architecture and distribution notes.
