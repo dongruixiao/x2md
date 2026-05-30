@@ -5,5 +5,8 @@ __pycache__/
 venv/
 dist/
 build/
+apps/desktop/dist/
+apps/desktop/node_modules/
+apps/desktop/src-tauri/target/
 .pytest_cache/
 .DS_Store

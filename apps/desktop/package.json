@@ -1,0 +1,19 @@
+{
+  "name": "@x2md/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "web:dev": "vite --host 127.0.0.1 --port 1420",
+    "web:build": "vite build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.11.2",
+    "vite": "^7.3.3"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.11.0"
+  }
+}

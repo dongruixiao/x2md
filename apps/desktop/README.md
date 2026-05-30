@@ -20,12 +20,37 @@ returned local URL in a native window.
 - Python sidecar/runtime for the x2md service.
 - Existing x2md HTML UI for the first MVP.
 
+## Development
+
+```bash
+cd apps/desktop
+npm install
+npm run dev
+```
+
+Build the current shell:
+
+```bash
+cd apps/desktop
+npm run build
+```
+
+On macOS this produces:
+
+```text
+src-tauri/target/release/bundle/macos/x2md.app
+src-tauri/target/release/bundle/dmg/x2md_0.1.0_aarch64.dmg
+```
+
 ## MVP Scope
 
 - start `x2md desktop`;
 - show the local UI in a desktop window;
 - stop the child process when the app exits;
 - package macOS and Windows separately.
+
+The current checked-in shell is a buildable placeholder. It does not yet start
+the Python sidecar.
 
 ## Non-Goals For The First Shell
 
