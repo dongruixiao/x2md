@@ -17,6 +17,11 @@ pip install -e .
 ```
 
 The default install includes the fast, balanced, and best-quality conversion engines.
+The experimental RapidDoc engine is optional:
+
+```bash
+pip install "x2md[rapiddoc]"
+```
 
 Optional external tools (auto-detected, only needed for specific formats):
 
@@ -50,6 +55,7 @@ x2md web
 # quality/speed tradeoff
 x2md report.pdf --quality fast -o report.md
 x2md report.pdf --quality balanced -o report.md
+x2md report.pdf --quality rapid -o report.md
 x2md report.pdf --quality best -o report.md
 
 # Chinese report PDFs with OCR and charts/tables
@@ -68,7 +74,7 @@ or model downloads are needed. A compact progress line is shown by default. Use
 
 Useful options:
 
-- `--quality fast|balanced|best`: choose speed versus extraction quality.
+- `--quality fast|balanced|rapid|best`: choose speed versus extraction quality.
 - `--ocr`: enable OCR for scanned or image-only documents.
 - `--remove-watermark`: remove repeated watermark text where possible.
 - `--language ch`: provide a language hint for OCR.
@@ -90,6 +96,7 @@ Quality modes:
 
 - `fast`: lightweight conversion for speed.
 - `balanced`: structured document conversion for everyday PDFs and Office files.
+- `rapid`: experimental RapidDoc mode for faster local high-quality PDF/Office parsing.
 - `best`: default mode; high-quality extraction without OCR by default. Add `--ocr` for scanned documents.
 
 ## Supported formats

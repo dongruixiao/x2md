@@ -1,4 +1,6 @@
 import io
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -16,6 +18,7 @@ from x2md.converter import (
     _remove_watermark_text,
     _rewrite_resource_links,
     convert_file,
+    convert_file_result,
     relocate_resources,
 )
 from x2md.io_utils import default_output_path, is_url, mirror_output_path
@@ -218,6 +221,30 @@ def test_cli_quality_best_uses_mineru(tmp_path, monkeypatch):
         docling_image_export_mode="referenced",
         docling_ocr_lang="ch",
         docling_table_mode="accurate",
+    ))]
+
+
+def test_cli_quality_rapid_uses_rapiddoc(tmp_path, monkeypatch):
+    src = tmp_path / "input.pdf"
+    out = tmp_path / "out.md"
+    src.write_text("pdf", encoding="utf-8")
+    calls = []
+
+    def fake_convert_file_result(path, backend="markitdown", verbose=True, options=None):
+        calls.append((backend, options))
+        return ConversionResult("# converted")
+
+    monkeypatch.setattr(cli, "convert_file_result", fake_convert_file_result)
+
+    assert cli.main([str(src), "-o", str(out), "--quality", "rapid"]) == 0
+    assert calls == [("rapiddoc", BackendOptions(
+        mineru_backend="pipeline",
+        mineru_method="auto",
+        mineru_lang="ch",
+        docling_ocr_lang="ch",
+        docling_table_mode="accurate",
+        rapiddoc_lang="ch",
+        rapiddoc_parse_method="auto",
     ))]
 
 
@@ -539,6 +566,65 @@ def test_mineru_backend_requires_cli(tmp_path, monkeypatch):
 
     with pytest.raises(ConversionError, match="best-quality conversion engine is not installed"):
         convert_file(src, "mineru")
+
+
+def test_rapiddoc_backend_uses_python_api_and_copies_images(tmp_path, monkeypatch):
+    src = tmp_path / "input.pdf"
+    src.write_text("pdf", encoding="utf-8")
+    calls = []
+
+    class FakeRapidDoc:
+        def __init__(self, **kwargs):
+            calls.append(("init", kwargs))
+
+        def __call__(self, path, **kwargs):
+            calls.append(("call", path, kwargs))
+            return types.SimpleNamespace(
+                markdown="![chart](images/chart.png)",
+                images={"images/chart.png": b"png"},
+            )
+
+    monkeypatch.setitem(sys.modules, "rapid_doc", types.SimpleNamespace(RapidDoc=FakeRapidDoc))
+    from x2md import converter
+
+    converter._rapiddoc_converter.cache_clear()
+    result = convert_file_result(
+        src,
+        "rapiddoc",
+        options=BackendOptions(
+            rapiddoc_lang="en",
+            rapiddoc_parse_method="ocr",
+            rapiddoc_start=1,
+            rapiddoc_end=2,
+            rapiddoc_formula=False,
+            rapiddoc_table=False,
+        ),
+    )
+
+    try:
+        assert result.text == "![chart](images/chart.png)"
+        assert len(result.resources) == 1
+        assert result.resources[0].relative_path == Path("images/chart.png")
+        assert result.resources[0].source.read_bytes() == b"png"
+        assert calls[0] == ("init", {"image_output_mode": "url", "image_dir_name": "images"})
+        assert calls[1] == ("call", src, {
+            "lang": "en",
+            "parse_method": "ocr",
+            "start_page_id": 1,
+            "end_page_id": 2,
+            "formula_enable": False,
+            "table_enable": False,
+            "f_dump_middle_json": False,
+            "f_dump_content_list": False,
+        })
+    finally:
+        for path in result.cleanup_paths:
+            if path.is_dir():
+                import shutil
+                shutil.rmtree(path, ignore_errors=True)
+            else:
+                path.unlink(missing_ok=True)
+        converter._rapiddoc_converter.cache_clear()
 
 
 def test_find_executable_checks_windows_suffixes(tmp_path, monkeypatch):

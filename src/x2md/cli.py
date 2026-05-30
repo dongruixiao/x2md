@@ -69,7 +69,7 @@ DOCLING_PIPELINES = ("legacy", "standard", "vlm", "asr")
 DOCLING_IMAGE_EXPORT_MODES = ("placeholder", "embedded", "referenced")
 DOCLING_TABLE_MODES = ("fast", "accurate")
 DOCLING_DEVICES = ("auto", "cpu", "cuda", "mps", "xpu")
-QUALITY_MODES = ("fast", "balanced", "best")
+QUALITY_MODES = ("fast", "balanced", "best", "rapid")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -152,6 +152,7 @@ def _backend_options(args: argparse.Namespace) -> BackendOptions:
     docling_ocr_lang = args.docling_ocr_lang or args.language
     docling_enrich_picture_description = args.docling_enrich_picture_description
     docling_enrich_chart_extraction = args.docling_enrich_chart_extraction
+    use_rapiddoc_options = args.quality == "rapid" or args.backend == "rapiddoc"
 
     if args.quality == "fast":
         mineru_backend = mineru_backend or "pipeline"
@@ -166,6 +167,10 @@ def _backend_options(args: argparse.Namespace) -> BackendOptions:
         mineru_method = mineru_method or "txt"
         docling_table_mode = docling_table_mode or "accurate"
         docling_image_export_mode = docling_image_export_mode or "referenced"
+    elif args.quality == "rapid":
+        mineru_backend = mineru_backend or "pipeline"
+        mineru_method = mineru_method or "auto"
+        docling_table_mode = docling_table_mode or "accurate"
 
     if args.ocr:
         mineru_method = "ocr"
@@ -207,6 +212,12 @@ def _backend_options(args: argparse.Namespace) -> BackendOptions:
         docling_enrich_chart_extraction=docling_enrich_chart_extraction,
         docling_device=args.docling_device,
         docling_num_threads=args.docling_num_threads,
+        rapiddoc_lang=args.language if use_rapiddoc_options else None,
+        rapiddoc_parse_method=mineru_method if use_rapiddoc_options else None,
+        rapiddoc_start=args.start_page if use_rapiddoc_options else None,
+        rapiddoc_end=args.end_page if use_rapiddoc_options else None,
+        rapiddoc_formula=False if use_rapiddoc_options and args.no_formula else None,
+        rapiddoc_table=False if use_rapiddoc_options and args.no_table else None,
         remove_watermark=args.remove_watermark,
     )
 
@@ -288,6 +299,8 @@ def _selected_backend(args: argparse.Namespace) -> Backend:
         return "markitdown"
     if args.quality == "balanced":
         return "docling"
+    if args.quality == "rapid":
+        return "rapiddoc"
     return "mineru"
 
 

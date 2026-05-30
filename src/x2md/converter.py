@@ -17,7 +17,7 @@ from pathlib import Path
 
 Backend = str
 
-BACKENDS = ("markitdown", "docling", "mineru", "auto")
+BACKENDS = ("markitdown", "docling", "mineru", "rapiddoc", "auto")
 
 
 class ConversionError(RuntimeError):
@@ -63,6 +63,12 @@ class BackendOptions:
     docling_enrich_chart_extraction: bool = False
     docling_device: str | None = None
     docling_num_threads: int | None = None
+    rapiddoc_lang: str | None = None
+    rapiddoc_parse_method: str | None = None
+    rapiddoc_start: int | None = None
+    rapiddoc_end: int | None = None
+    rapiddoc_formula: bool | None = None
+    rapiddoc_table: bool | None = None
     remove_watermark: bool = False
 
     def has_docling_cli_options(self) -> bool:
@@ -140,6 +146,58 @@ def _convert_file_docling(path: Path) -> str:
         raise
     except Exception as e:
         raise ConversionError(f"failed to convert {path.name}: {e}") from e
+
+
+def _write_rapiddoc_resources(images: dict[str, bytes]) -> tuple[tuple[Resource, ...], tuple[Path, ...]]:
+    if not images:
+        return (), ()
+    output_dir = Path(tempfile.mkdtemp(prefix="x2md-rapiddoc-"))
+    resources = []
+    try:
+        for image_path, image_bytes in images.items():
+            relative_path = Path(image_path)
+            if relative_path.is_absolute() or ".." in relative_path.parts:
+                relative_path = Path("images") / relative_path.name
+            target = output_dir / relative_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(image_bytes)
+            resources.append(Resource(target, relative_path))
+        return tuple(resources), (output_dir,)
+    except Exception:
+        shutil.rmtree(output_dir, ignore_errors=True)
+        raise
+
+
+@lru_cache(maxsize=1)
+def _rapiddoc_converter():
+    try:
+        from rapid_doc import RapidDoc
+    except ImportError as e:
+        raise ConversionError("rapid conversion engine is not installed; install with: pip install 'x2md[rapiddoc]'") from e
+    return RapidDoc(image_output_mode="url", image_dir_name="images")
+
+
+def _convert_file_rapiddoc_result(path: Path, options: BackendOptions) -> ConversionResult:
+    try:
+        result = _rapiddoc_converter()(
+            path,
+            lang=options.rapiddoc_lang or options.mineru_lang or "ch",
+            parse_method=options.rapiddoc_parse_method or options.mineru_method or "auto",
+            start_page_id=options.rapiddoc_start if options.rapiddoc_start is not None else options.mineru_start or 0,
+            end_page_id=options.rapiddoc_end if options.rapiddoc_end is not None else options.mineru_end,
+            formula_enable=options.rapiddoc_formula if options.rapiddoc_formula is not None else options.mineru_formula,
+            table_enable=options.rapiddoc_table if options.rapiddoc_table is not None else options.mineru_table,
+            f_dump_middle_json=False,
+            f_dump_content_list=False,
+        )
+        text = getattr(result, "markdown", "") or ""
+        images = getattr(result, "images", {}) or {}
+        resources, cleanup_paths = _write_rapiddoc_resources(images)
+        return ConversionResult(text=text, resources=resources, cleanup_paths=cleanup_paths)
+    except ConversionError:
+        raise
+    except Exception as e:
+        raise ConversionError(f"failed to convert {path.name} with RapidDoc: {e}") from e
 
 
 def _find_mineru_markdown(output_dir: Path) -> Path:
@@ -478,6 +536,8 @@ def convert_file_result(
             return ConversionResult(_convert_file_docling(input_path))
         if selected_backend == "mineru":
             return _convert_file_mineru_result(input_path, options, verbose, display_path)
+        if selected_backend == "rapiddoc":
+            return _convert_file_rapiddoc_result(input_path, options)
         return ConversionResult(_convert_file_markitdown(input_path))
 
     try:
@@ -501,8 +561,8 @@ def convert_file(path: Path, backend: Backend = "markitdown") -> str:
 
 def convert_url(url: str, backend: Backend = "markitdown") -> str:
     backend = _normalize_backend(backend)
-    if backend == "mineru":
-        raise ConversionError("best-quality mode does not support URL input")
+    if backend in {"mineru", "rapiddoc"}:
+        raise ConversionError(f"{backend} backend does not support URL input")
     try:
         if backend == "docling":
             result = _docling_converter().convert(url)
@@ -525,7 +585,7 @@ def convert_stream_result(
     if not suffix.startswith("."):
         suffix = "." + suffix
     backend = _normalize_backend(backend, Path("stdin").with_suffix(suffix))
-    if backend in {"docling", "mineru"}:
+    if backend in {"docling", "mineru", "rapiddoc"}:
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
             f.write(data)
             tmp_path = Path(f.name)
