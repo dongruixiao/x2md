@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import json
 import shutil
 import socket
 import subprocess
@@ -286,9 +287,12 @@ def run(host: str = "127.0.0.1", port: int = 8765, desktop: bool = False) -> Non
         port = _free_port()
     token = uuid.uuid4().hex if desktop else None
     url = f"http://{host}:{port}"
-    if host in {"127.0.0.1", "localhost"}:
+    if host in {"127.0.0.1", "localhost"} and not desktop:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
-    print(f"x2md web running at {url}")
+    if desktop:
+        print(json.dumps({"url": url, "token": token}, ensure_ascii=False), flush=True)
+    else:
+        print(f"x2md web running at {url}", flush=True)
     uvicorn.run(create_app(token), host=host, port=port, log_level="warning")
 
 
