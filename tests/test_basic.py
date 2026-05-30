@@ -239,12 +239,13 @@ def test_cli_quality_rapid_uses_rapiddoc(tmp_path, monkeypatch):
     assert cli.main([str(src), "-o", str(out), "--quality", "rapid"]) == 0
     assert calls == [("rapiddoc", BackendOptions(
         mineru_backend="pipeline",
-        mineru_method="auto",
+        mineru_method="txt",
         mineru_lang="ch",
         docling_ocr_lang="ch",
         docling_table_mode="accurate",
         rapiddoc_lang="ch",
-        rapiddoc_parse_method="auto",
+        rapiddoc_parse_method="txt",
+        rapiddoc_formula=False,
     ))]
 
 

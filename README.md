@@ -99,7 +99,7 @@ Quality modes:
 
 - `fast`: lightweight conversion for speed.
 - `balanced`: structured document conversion for everyday PDFs and Office files.
-- `rapid`: experimental RapidDoc mode for faster local high-quality PDF/Office parsing.
+- `rapid`: experimental RapidDoc mode for faster local PDF/Office parsing. Add `--ocr` for scanned PDFs.
 - `best`: default mode; high-quality extraction without OCR by default. Add `--ocr` for scanned documents.
 
 ## Supported formats

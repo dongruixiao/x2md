@@ -169,7 +169,7 @@ def _backend_options(args: argparse.Namespace) -> BackendOptions:
         docling_image_export_mode = docling_image_export_mode or "referenced"
     elif args.quality == "rapid":
         mineru_backend = mineru_backend or "pipeline"
-        mineru_method = mineru_method or "auto"
+        mineru_method = mineru_method or "txt"
         docling_table_mode = docling_table_mode or "accurate"
 
     if args.ocr:
@@ -216,7 +216,7 @@ def _backend_options(args: argparse.Namespace) -> BackendOptions:
         rapiddoc_parse_method=mineru_method if use_rapiddoc_options else None,
         rapiddoc_start=args.start_page if use_rapiddoc_options else None,
         rapiddoc_end=args.end_page if use_rapiddoc_options else None,
-        rapiddoc_formula=False if use_rapiddoc_options and args.no_formula else None,
+        rapiddoc_formula=False if use_rapiddoc_options else None,
         rapiddoc_table=False if use_rapiddoc_options and args.no_table else None,
         remove_watermark=args.remove_watermark,
     )
