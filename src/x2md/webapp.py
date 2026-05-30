@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -13,8 +14,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from .converter import BackendOptions, ConversionError, ConversionResult, Resource, convert_file_result, relocate_resources
 from .io_utils import write_text
@@ -51,6 +52,8 @@ def _backend_for_quality(quality: str) -> str:
         return "markitdown"
     if quality == "balanced":
         return "docling"
+    if quality == "rapid":
+        return "rapiddoc"
     return "mineru"
 
 
@@ -58,6 +61,7 @@ def _options(quality: str, ocr: bool, remove_watermark: bool, charts: bool, lang
     mineru_method = "ocr" if ocr else "txt"
     docling_table_mode = "fast" if quality == "fast" else "accurate"
     docling_image_export_mode = "referenced" if quality == "best" or charts else None
+    rapiddoc_formula = False if quality == "rapid" else None
     return BackendOptions(
         mineru_backend="pipeline",
         mineru_method=mineru_method,
@@ -70,6 +74,9 @@ def _options(quality: str, ocr: bool, remove_watermark: bool, charts: bool, lang
         docling_table_mode=docling_table_mode,
         docling_enrich_picture_description=charts,
         docling_enrich_chart_extraction=charts,
+        rapiddoc_lang=language if quality == "rapid" else None,
+        rapiddoc_parse_method=mineru_method if quality == "rapid" else None,
+        rapiddoc_formula=rapiddoc_formula,
         remove_watermark=remove_watermark,
     )
 
@@ -98,15 +105,8 @@ def _write_conversion(target: Path, result: ConversionResult) -> None:
         _cleanup(result)
 
 
-def _safe_output_path(output_dir: Path, source: Path) -> Path:
-    target = output_dir / f"{source.stem}.md"
-    if not target.exists():
-        return target
-    for i in range(2, 1000):
-        candidate = output_dir / f"{source.stem}-{i}.md"
-        if not candidate.exists():
-            return candidate
-    return output_dir / f"{source.stem}-{uuid.uuid4().hex[:8]}.md"
+def _output_path(output_dir: Path, source: Path) -> Path:
+    return output_dir / f"{source.stem}.md"
 
 
 def _open_folder(path: Path) -> None:
@@ -138,57 +138,77 @@ def _run_job(
     remove_watermark: bool,
     charts: bool,
     language: str,
+    overwrite: bool,
 ) -> None:
-    options = _options(quality, ocr, remove_watermark, charts, language)
-    backend = _backend_for_quality(quality)
-    output_dir = Path(job.output_dir).expanduser()
-    output_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        options = _options(quality, ocr, remove_watermark, charts, language)
+        backend = _backend_for_quality(quality)
+        output_dir = Path(job.output_dir).expanduser()
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-    job.status = "running"
-    job.message = "Converting"
-    _set_job(job)
-
-    for item in job.files:
-        source = input_dir / item.name
-        item.status = "running"
-        item.message = "Converting"
-        _set_job(job)
-        try:
-            result = convert_file_result(source, backend, False, options)
-            target = _safe_output_path(output_dir, source)
-            _write_conversion(target, result)
-            item.output = str(target)
-            item.download_url = _register_download(target)
-            item.status = "done"
-            item.message = "Done"
-        except ConversionError as exc:
-            item.status = "failed"
-            item.message = str(exc)
-            job.status = "failed"
-        except Exception as exc:
-            item.status = "failed"
-            item.message = f"failed to convert {item.name}: {exc}"
-            job.status = "failed"
+        job.status = "running"
+        job.message = "Converting"
         _set_job(job)
 
-    if all(item.status == "done" for item in job.files):
-        job.status = "done"
-        job.message = "Done"
-    elif any(item.status == "done" for item in job.files):
-        job.status = "failed"
-        job.message = "Some files failed"
-    else:
-        job.status = "failed"
-        job.message = "Failed"
-    _set_job(job)
+        for item in job.files:
+            source = input_dir / item.name
+            target = _output_path(output_dir, source)
+            if target.exists() and not overwrite:
+                item.output = str(target)
+                item.download_url = _register_download(target)
+                item.status = "done"
+                item.message = "Skipped existing output"
+                _set_job(job)
+                continue
+
+            item.status = "running"
+            item.message = "Converting"
+            _set_job(job)
+            try:
+                result = convert_file_result(source, backend, False, options)
+                _write_conversion(target, result)
+                item.output = str(target)
+                item.download_url = _register_download(target)
+                item.status = "done"
+                item.message = "Done"
+            except ConversionError as exc:
+                item.status = "failed"
+                item.message = str(exc)
+                job.status = "failed"
+            except Exception as exc:
+                item.status = "failed"
+                item.message = f"failed to convert {item.name}: {exc}"
+                job.status = "failed"
+            _set_job(job)
+
+        if all(item.status == "done" for item in job.files):
+            job.status = "done"
+            job.message = "Done"
+        elif any(item.status == "done" for item in job.files):
+            job.status = "failed"
+            job.message = "Some files failed"
+        else:
+            job.status = "failed"
+            job.message = "Failed"
+        _set_job(job)
+    finally:
+        shutil.rmtree(input_dir, ignore_errors=True)
 
 
-def create_app() -> FastAPI:
+def create_app(api_token: str | None = None) -> FastAPI:
     app = FastAPI(title="x2md")
+
+    @app.middleware("http")
+    async def require_api_token(request: Request, call_next):
+        if api_token and request.url.path.startswith("/api/"):
+            supplied_token = request.headers.get("x-x2md-token") or request.query_params.get("x2md_token")
+            if supplied_token != api_token:
+                return JSONResponse({"detail": "invalid API token"}, status_code=403)
+        return await call_next(request)
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
-        return INDEX_HTML
+        return INDEX_HTML.replace("__X2MD_TOKEN__", api_token or "")
 
     @app.post("/api/jobs")
     async def create_job(
@@ -199,8 +219,9 @@ def create_app() -> FastAPI:
         remove_watermark: bool = Form(False),
         charts: bool = Form(False),
         language: str = Form("ch"),
+        overwrite: bool = Form(False),
     ) -> dict[str, str]:
-        if quality not in {"fast", "balanced", "best"}:
+        if quality not in {"fast", "balanced", "rapid", "best"}:
             raise HTTPException(400, "invalid quality")
         input_dir = Path(tempfile.mkdtemp(prefix="x2md-web-input-"))
         if not output_dir.strip():
@@ -218,7 +239,7 @@ def create_app() -> FastAPI:
         _set_job(job)
         thread = threading.Thread(
             target=_run_job,
-            args=(job, input_dir, quality, ocr, remove_watermark, charts, language),
+            args=(job, input_dir, quality, ocr, remove_watermark, charts, language, overwrite),
             daemon=True,
         )
         thread.start()
@@ -252,14 +273,23 @@ def create_app() -> FastAPI:
     return app
 
 
-def run(host: str = "127.0.0.1", port: int = 8765) -> None:
+def _free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+def run(host: str = "127.0.0.1", port: int = 8765, desktop: bool = False) -> None:
     import uvicorn
 
+    if port == 0:
+        port = _free_port()
+    token = uuid.uuid4().hex if desktop else None
     url = f"http://{host}:{port}"
     if host in {"127.0.0.1", "localhost"}:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     print(f"x2md web running at {url}")
-    uvicorn.run(create_app(), host=host, port=port, log_level="warning")
+    uvicorn.run(create_app(token), host=host, port=port, log_level="warning")
 
 
 INDEX_HTML = r"""<!doctype html>
@@ -475,8 +505,9 @@ INDEX_HTML = r"""<!doctype html>
       <div class="field">
         <label for="quality">转换质量</label>
         <select id="quality">
-          <option value="best">高质量</option>
           <option value="balanced">标准</option>
+          <option value="rapid">快速高质量</option>
+          <option value="best">高质量</option>
           <option value="fast">快速</option>
         </select>
       </div>
@@ -503,12 +534,17 @@ INDEX_HTML = r"""<!doctype html>
         <span>图表识别</span>
         <input id="charts" type="checkbox">
       </div>
+      <div class="check">
+        <span>覆盖已有输出</span>
+        <input id="overwrite" type="checkbox">
+      </div>
       <div class="field" style="margin-top:18px">
         <button class="primary" id="start" disabled>开始转换</button>
       </div>
     </aside>
   </main>
   <script>
+    const X2MD_TOKEN = "__X2MD_TOKEN__";
     const state = { files: [], jobId: null, job: null };
     const $ = (id) => document.getElementById(id);
     const rows = $("rows");
@@ -544,7 +580,7 @@ INDEX_HTML = r"""<!doctype html>
             <td class="name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</td>
             <td><span class="status ${file.status}">${label(file.status)}${file.status === "running" ? '<span class="dots"></span>' : ""}</span></td>
             <td class="message hide-sm" title="${escapeHtml(file.message || "")}">${escapeHtml(file.message || "")}</td>
-            <td>${file.download_url ? `<a href="${file.download_url}">下载</a>` : ""}</td>
+            <td>${file.download_url ? `<a href="${downloadUrl(file.download_url)}">下载</a>` : ""}</td>
           </tr>
         `).join("");
       } else if (state.files.length) {
@@ -584,8 +620,9 @@ INDEX_HTML = r"""<!doctype html>
       data.append("ocr", $("ocr").checked ? "true" : "false");
       data.append("remove_watermark", $("removeWatermark").checked ? "true" : "false");
       data.append("charts", $("charts").checked ? "true" : "false");
+      data.append("overwrite", $("overwrite").checked ? "true" : "false");
       $("start").disabled = true;
-      const response = await fetch("/api/jobs", { method: "POST", body: data });
+      const response = await apiFetch("/api/jobs", { method: "POST", body: data });
       if (!response.ok) {
         alert(await response.text());
         $("start").disabled = false;
@@ -598,7 +635,7 @@ INDEX_HTML = r"""<!doctype html>
 
     async function poll() {
       if (!state.jobId) return;
-      const response = await fetch(`/api/jobs/${state.jobId}`);
+      const response = await apiFetch(`/api/jobs/${state.jobId}`);
       state.job = await response.json();
       render();
       if (state.job.status === "queued" || state.job.status === "running") {
@@ -615,7 +652,7 @@ INDEX_HTML = r"""<!doctype html>
     });
     $("start").addEventListener("click", start);
     $("openFolder").addEventListener("click", () => {
-      if (state.jobId) fetch(`/api/open-folder/${state.jobId}`, { method: "POST" });
+      if (state.jobId) apiFetch(`/api/open-folder/${state.jobId}`, { method: "POST" });
     });
     ["dragenter", "dragover"].forEach(name => drop.addEventListener(name, event => {
       event.preventDefault();
@@ -626,6 +663,19 @@ INDEX_HTML = r"""<!doctype html>
       drop.classList.remove("dragging");
     }));
     drop.addEventListener("drop", event => setFiles(event.dataTransfer.files));
+
+    function apiFetch(url, options = {}) {
+      const headers = new Headers(options.headers || {});
+      if (X2MD_TOKEN) headers.set("x-x2md-token", X2MD_TOKEN);
+      return fetch(url, { ...options, headers });
+    }
+
+    function downloadUrl(url) {
+      if (!X2MD_TOKEN) return url;
+      const separator = url.includes("?") ? "&" : "?";
+      return `${url}${separator}x2md_token=${encodeURIComponent(X2MD_TOKEN)}`;
+    }
+
     render();
   </script>
 </body>

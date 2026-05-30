@@ -54,6 +54,7 @@ cat file.docx | x2md - -f docx
 
 # local drag-and-drop web UI
 x2md web
+x2md desktop  # local UI on a random port with API token protection
 
 # quality/speed tradeoff
 x2md report.pdf --quality fast -o report.md
@@ -88,6 +89,7 @@ Useful options:
 Web UI:
 
 - Run `x2md web` and open the local browser page.
+- Run `x2md desktop` for a desktop-launcher friendly local UI with a random port and API token.
 - Drag files into the page, choose quality/options, and start conversion.
 - Files are processed locally on the same machine and are not uploaded to a remote server.
 

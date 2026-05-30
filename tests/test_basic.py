@@ -411,13 +411,25 @@ def test_cli_remove_watermark_flag(tmp_path, monkeypatch):
 def test_cli_web_starts_server(monkeypatch):
     calls = []
 
-    def fake_run(host, port):
-        calls.append((host, port))
+    def fake_run(host, port, desktop=False):
+        calls.append((host, port, desktop))
 
     monkeypatch.setattr("x2md.webapp.run", fake_run)
 
     assert cli.main(["web", "--host", "127.0.0.1", "--port", "9999"]) == 0
-    assert calls == [("127.0.0.1", 9999)]
+    assert calls == [("127.0.0.1", 9999, False)]
+
+
+def test_cli_desktop_starts_tokenized_random_port_server(monkeypatch):
+    calls = []
+
+    def fake_run(host, port, desktop=False):
+        calls.append((host, port, desktop))
+
+    monkeypatch.setattr("x2md.webapp.run", fake_run)
+
+    assert cli.main(["desktop"]) == 0
+    assert calls == [("127.0.0.1", 0, True)]
 
 
 def test_cli_builds_backend_options(tmp_path, monkeypatch):
@@ -612,6 +624,18 @@ def test_web_app_serves_index():
     assert response.status_code == 200
     assert "x2md 文档转换工具" in response.text
     assert "canStartFreshQueue" in response.text
+    assert 'value="rapid"' in response.text
+    assert "覆盖已有输出" in response.text
+
+
+def test_web_app_api_token_protects_desktop_api():
+    from fastapi.testclient import TestClient
+
+    client = TestClient(create_app("secret"))
+
+    assert client.get("/").status_code == 200
+    assert client.get("/api/jobs/missing").status_code == 403
+    assert client.get("/api/jobs/missing", headers={"x-x2md-token": "secret"}).status_code == 404
 
 
 def test_web_job_converts_uploaded_file(tmp_path, monkeypatch):
@@ -651,6 +675,67 @@ def test_web_job_converts_uploaded_file(tmp_path, monkeypatch):
     assert job["files"][0]["download_url"]
     assert (tmp_path / "sample.md").read_text(encoding="utf-8") == "# converted\n\n![chart](sample.assets/images/chart.jpg)"
     assert (tmp_path / "sample.assets" / "images" / "chart.jpg").read_bytes() == b"jpg"
+
+
+def test_web_job_skips_existing_output_by_default(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    existing = tmp_path / "sample.md"
+    existing.write_text("# existing", encoding="utf-8")
+    calls = []
+
+    def fake_convert_file_result(path, backend="markitdown", verbose=True, options=None):
+        calls.append(path)
+        return ConversionResult("# converted")
+
+    monkeypatch.setattr("x2md.webapp.convert_file_result", fake_convert_file_result)
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/api/jobs",
+        data={"output_dir": str(tmp_path), "quality": "fast"},
+        files=[("files", ("sample.pdf", b"pdf", "application/pdf"))],
+    )
+
+    assert response.status_code == 200
+    job_id = response.json()["job_id"]
+    for _ in range(20):
+        job = client.get(f"/api/jobs/{job_id}").json()
+        if job["status"] == "done":
+            break
+    assert calls == []
+    assert job["files"][0]["message"] == "Skipped existing output"
+    assert existing.read_text(encoding="utf-8") == "# existing"
+
+
+def test_web_job_overwrite_reconverts_existing_output(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    existing = tmp_path / "sample.md"
+    existing.write_text("# existing", encoding="utf-8")
+    calls = []
+
+    def fake_convert_file_result(path, backend="markitdown", verbose=True, options=None):
+        calls.append(path)
+        return ConversionResult("# converted")
+
+    monkeypatch.setattr("x2md.webapp.convert_file_result", fake_convert_file_result)
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/api/jobs",
+        data={"output_dir": str(tmp_path), "quality": "fast", "overwrite": "true"},
+        files=[("files", ("sample.pdf", b"pdf", "application/pdf"))],
+    )
+
+    assert response.status_code == 200
+    job_id = response.json()["job_id"]
+    for _ in range(20):
+        job = client.get(f"/api/jobs/{job_id}").json()
+        if job["status"] == "done":
+            break
+    assert calls
+    assert existing.read_text(encoding="utf-8") == "# converted"
 
 
 def test_mineru_backend_requires_cli(tmp_path, monkeypatch):

@@ -407,6 +407,12 @@ def main(argv: list[str] | None = None) -> int:
         run(args.host, args.port)
         return 0
 
+    if args.input == "desktop":
+        from .webapp import run
+
+        run(args.host, 0 if args.port == 8765 else args.port, desktop=True)
+        return 0
+
     try:
         options = _backend_options(args)
         backend = _selected_backend(args)
