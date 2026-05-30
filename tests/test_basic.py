@@ -568,7 +568,7 @@ def test_mineru_backend_requires_cli(tmp_path, monkeypatch):
         convert_file(src, "mineru")
 
 
-def test_rapiddoc_backend_uses_python_api_and_copies_images(tmp_path, monkeypatch, capsys):
+def test_rapiddoc_backend_uses_python_api_copies_images_and_shows_progress(tmp_path, monkeypatch, capsys):
     src = tmp_path / "input.pdf"
     src.write_text("pdf", encoding="utf-8")
     calls = []
@@ -624,6 +624,8 @@ def test_rapiddoc_backend_uses_python_api_and_copies_images(tmp_path, monkeypatc
         assert "rapid init log" not in captured.out
         assert "rapid call log" not in captured.out
         assert "rapid err log" not in captured.err
+        assert f"Converting {src.name}" in captured.err
+        assert " done\n" in captured.err
     finally:
         for path in result.cleanup_paths:
             if path.is_dir():
@@ -631,6 +633,30 @@ def test_rapiddoc_backend_uses_python_api_and_copies_images(tmp_path, monkeypatc
                 shutil.rmtree(path, ignore_errors=True)
             else:
                 path.unlink(missing_ok=True)
+        converter._rapiddoc_converter.cache_clear()
+
+
+def test_rapiddoc_backend_quiet_hides_progress(tmp_path, monkeypatch, capsys):
+    src = tmp_path / "input.pdf"
+    src.write_text("pdf", encoding="utf-8")
+
+    class FakeRapidDoc:
+        def __init__(self, **kwargs):
+            pass
+
+        def __call__(self, path, **kwargs):
+            return types.SimpleNamespace(markdown="# converted", images={})
+
+    monkeypatch.setitem(sys.modules, "rapid_doc", types.SimpleNamespace(RapidDoc=FakeRapidDoc))
+    from x2md import converter
+
+    converter._rapiddoc_converter.cache_clear()
+    try:
+        result = convert_file_result(src, "rapiddoc", verbose=False)
+        assert result.text == "# converted"
+        captured = capsys.readouterr()
+        assert captured.err == ""
+    finally:
         converter._rapiddoc_converter.cache_clear()
 
 

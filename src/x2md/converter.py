@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import warnings
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
@@ -198,20 +199,57 @@ def _rapiddoc_converter():
     return RapidDoc(image_output_mode="url", image_dir_name="images")
 
 
-def _convert_file_rapiddoc_result(path: Path, options: BackendOptions) -> ConversionResult:
+def _call_rapiddoc(path: Path, options: BackendOptions):
+    with _suppress_rapiddoc_logs():
+        return _rapiddoc_converter()(
+            path,
+            lang=options.rapiddoc_lang or options.mineru_lang or "ch",
+            parse_method=options.rapiddoc_parse_method or options.mineru_method or "auto",
+            start_page_id=options.rapiddoc_start if options.rapiddoc_start is not None else options.mineru_start or 0,
+            end_page_id=options.rapiddoc_end if options.rapiddoc_end is not None else options.mineru_end,
+            formula_enable=options.rapiddoc_formula if options.rapiddoc_formula is not None else options.mineru_formula,
+            table_enable=options.rapiddoc_table if options.rapiddoc_table is not None else options.mineru_table,
+            f_dump_middle_json=False,
+            f_dump_content_list=False,
+        )
+
+
+def _run_rapiddoc_with_progress(path: Path, options: BackendOptions, verbose: bool, display_path: Path) -> object:
+    if not verbose:
+        return _call_rapiddoc(path, options)
+
+    result = None
+    error = None
+
+    def target() -> None:
+        nonlocal result, error
+        try:
+            result = _call_rapiddoc(path, options)
+        except BaseException as e:
+            error = e
+
+    sys.stderr.write(f"Converting {display_path.name}")
+    sys.stderr.flush()
+    thread = threading.Thread(target=target, daemon=True)
+    thread.start()
+    while thread.is_alive():
+        sys.stderr.write(".")
+        sys.stderr.flush()
+        thread.join(1)
+    sys.stderr.write(" failed\n" if error is not None else " done\n")
+    if error is not None:
+        raise error
+    return result
+
+
+def _convert_file_rapiddoc_result(
+    path: Path,
+    options: BackendOptions,
+    verbose: bool = True,
+    display_path: Path | None = None,
+) -> ConversionResult:
     try:
-        with _suppress_rapiddoc_logs():
-            result = _rapiddoc_converter()(
-                path,
-                lang=options.rapiddoc_lang or options.mineru_lang or "ch",
-                parse_method=options.rapiddoc_parse_method or options.mineru_method or "auto",
-                start_page_id=options.rapiddoc_start if options.rapiddoc_start is not None else options.mineru_start or 0,
-                end_page_id=options.rapiddoc_end if options.rapiddoc_end is not None else options.mineru_end,
-                formula_enable=options.rapiddoc_formula if options.rapiddoc_formula is not None else options.mineru_formula,
-                table_enable=options.rapiddoc_table if options.rapiddoc_table is not None else options.mineru_table,
-                f_dump_middle_json=False,
-                f_dump_content_list=False,
-            )
+        result = _run_rapiddoc_with_progress(path, options, verbose, display_path or path)
         text = getattr(result, "markdown", "") or ""
         images = getattr(result, "images", {}) or {}
         resources, cleanup_paths = _write_rapiddoc_resources(images)
@@ -559,7 +597,7 @@ def convert_file_result(
         if selected_backend == "mineru":
             return _convert_file_mineru_result(input_path, options, verbose, display_path)
         if selected_backend == "rapiddoc":
-            return _convert_file_rapiddoc_result(input_path, options)
+            return _convert_file_rapiddoc_result(input_path, options, verbose, display_path)
         return ConversionResult(_convert_file_markitdown(input_path))
 
     try:
