@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::{
     collections::VecDeque,
+    env,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
@@ -26,6 +27,7 @@ struct ServiceReady {
 struct ServiceStarting {
     python: String,
     args: Vec<String>,
+    source: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -40,25 +42,117 @@ struct ServiceError {
     logs: Vec<String>,
 }
 
-fn repo_root() -> &'static Path {
+struct RuntimeConfig {
+    python: PathBuf,
+    working_dir: PathBuf,
+    source: String,
+}
+
+fn compiled_repo_root() -> Option<&'static Path> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    Path::new(manifest_dir)
+    let root = Path::new(manifest_dir)
         .parent()
         .and_then(|path| path.parent())
         .and_then(|path| path.parent())
-        .expect("desktop app must live under apps/desktop/src-tauri")
+        .expect("desktop app must live under apps/desktop/src-tauri");
+    root.join("pyproject.toml").exists().then_some(root)
 }
 
-fn python_path() -> PathBuf {
-    let venv_python = if cfg!(windows) {
-        repo_root().join(".venv").join("Scripts").join("python.exe")
+fn env_python() -> Option<PathBuf> {
+    env::var_os("X2MD_DESKTOP_PYTHON")
+        .or_else(|| env::var_os("X2MD_PYTHON"))
+        .map(PathBuf::from)
+        .filter(|path| path.exists())
+}
+
+fn venv_python(root: &Path) -> PathBuf {
+    if cfg!(windows) {
+        root.join(".venv").join("Scripts").join("python.exe")
     } else {
-        repo_root().join(".venv").join("bin").join("python")
-    };
-    if venv_python.exists() {
-        venv_python
+        root.join(".venv").join("bin").join("python")
+    }
+}
+
+fn bundled_python_candidates(resource_dir: &Path) -> Vec<PathBuf> {
+    if cfg!(windows) {
+        vec![
+            resource_dir
+                .join("x2md-runtime")
+                .join("Scripts")
+                .join("python.exe"),
+            resource_dir
+                .join("x2md-runtime")
+                .join("python")
+                .join("python.exe"),
+            resource_dir.join("python").join("python.exe"),
+        ]
+    } else {
+        vec![
+            resource_dir
+                .join("x2md-runtime")
+                .join("bin")
+                .join("python3"),
+            resource_dir.join("x2md-runtime").join("bin").join("python"),
+            resource_dir.join("python").join("bin").join("python3"),
+            resource_dir.join("python").join("bin").join("python"),
+        ]
+    }
+}
+
+fn fallback_python() -> PathBuf {
+    if cfg!(windows) {
+        PathBuf::from("python")
     } else {
         PathBuf::from("python3")
+    }
+}
+
+fn resolve_runtime(app: &tauri::AppHandle) -> RuntimeConfig {
+    let resource_dir = app.path().resource_dir().ok();
+
+    if let Some(python) = env_python() {
+        return RuntimeConfig {
+            working_dir: python
+                .parent()
+                .map(Path::to_path_buf)
+                .or_else(|| env::current_dir().ok())
+                .unwrap_or_else(|| PathBuf::from(".")),
+            python,
+            source: "env".to_string(),
+        };
+    }
+
+    if let Some(resource_dir) = resource_dir.as_ref() {
+        if let Some(python) = bundled_python_candidates(resource_dir)
+            .into_iter()
+            .find(|path| path.exists())
+        {
+            return RuntimeConfig {
+                python,
+                working_dir: resource_dir.clone(),
+                source: "bundled".to_string(),
+            };
+        }
+    }
+
+    if let Some(repo_root) = compiled_repo_root() {
+        let python = venv_python(repo_root);
+        if python.exists() {
+            return RuntimeConfig {
+                python,
+                working_dir: repo_root.to_path_buf(),
+                source: "dev-venv".to_string(),
+            };
+        }
+    }
+
+    RuntimeConfig {
+        python: fallback_python(),
+        working_dir: resource_dir
+            .or_else(|| compiled_repo_root().map(Path::to_path_buf))
+            .or_else(|| env::current_dir().ok())
+            .unwrap_or_else(|| PathBuf::from(".")),
+        source: "system".to_string(),
     }
 }
 
@@ -87,20 +181,23 @@ fn stop_x2md_service(app: &tauri::AppHandle) {
 
 fn launch_x2md_service(app: tauri::AppHandle) {
     thread::spawn(move || {
-        let python = python_path();
+        let runtime = resolve_runtime(&app);
         let args = SERVICE_ARGS.map(String::from).to_vec();
         let _ = app.emit(
             "x2md-service-starting",
             ServiceStarting {
-                python: python.display().to_string(),
+                python: runtime.python.display().to_string(),
                 args: args.clone(),
+                source: runtime.source.clone(),
             },
         );
 
-        let mut command = Command::new(&python);
+        let mut command = Command::new(&runtime.python);
         command
-            .current_dir(repo_root())
+            .current_dir(&runtime.working_dir)
             .args(&args)
+            .env("PYTHONUNBUFFERED", "1")
+            .env("PYTHONUTF8", "1")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
@@ -109,7 +206,11 @@ fn launch_x2md_service(app: tauri::AppHandle) {
             Err(error) => {
                 emit_service_error(
                     &app,
-                    format!("failed to start x2md with {}: {error}", python.display()),
+                    format!(
+                        "failed to start x2md with {} from {}: {error}",
+                        runtime.python.display(),
+                        runtime.source
+                    ),
                     &[],
                 );
                 return;

@@ -49,8 +49,30 @@ src-tauri/target/release/bundle/dmg/x2md_0.1.0_aarch64.dmg
 - stop the child process when the app exits;
 - package macOS and Windows separately.
 
-The current checked-in shell is a buildable placeholder. It does not yet start
-the Python sidecar.
+The current checked-in shell starts the Python x2md service, shows startup
+diagnostics, and navigates to the local web UI when the service reports its URL.
+It is still not a customer-ready offline bundle because the Python runtime and
+wheelhouse are not packaged into the app yet.
+
+## Python Runtime Resolution
+
+The launcher resolves Python in this order:
+
+1. `X2MD_DESKTOP_PYTHON`, then `X2MD_PYTHON`;
+2. bundled app resources:
+   - macOS/Linux: `x2md-runtime/bin/python3` or `x2md-runtime/bin/python`;
+   - Windows: `x2md-runtime/Scripts/python.exe`;
+3. repository development virtualenv:
+   - macOS/Linux: `.venv/bin/python`;
+   - Windows: `.venv/Scripts/python.exe`;
+4. system fallback:
+   - macOS/Linux: `python3`;
+   - Windows: `python`.
+
+The startup panel displays the chosen runtime source, command, and recent
+stderr output. For customer distribution, build a platform-specific
+`x2md-runtime` resource that already contains x2md and the selected conversion
+dependencies.
 
 ## Non-Goals For The First Shell
 

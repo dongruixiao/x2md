@@ -43,13 +43,13 @@ function showSelectedFiles(files) {
 
 async function bindServiceEvents() {
   await listen("x2md-service-starting", (event) => {
-    const { python, args } = event.payload;
+    const { python, args, source } = event.payload;
     const command = [python, ...args].join(" ");
     commandBox.hidden = false;
     serviceCommand.textContent = command;
     logs.length = 0;
     renderLogs();
-    setServiceState("starting", "正在启动服务", "正在启动本机 x2md 服务，成功后会自动进入转换界面。");
+    setServiceState("starting", "正在启动服务", `正在使用 ${source} 运行时启动本机 x2md 服务。`);
   });
 
   await listen("x2md-service-log", (event) => {

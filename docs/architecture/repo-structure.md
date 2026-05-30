@@ -27,6 +27,23 @@ x2md/
 - `docs/architecture`: decisions that affect packaging, runtime isolation, and
   cross-platform distribution.
 
+## Desktop Runtime Boundary
+
+The desktop shell treats Python as a runtime dependency, not as app logic. Its
+launcher resolves a Python executable from environment overrides, bundled app
+resources, the development `.venv`, or the system fallback. Customer installers
+should eventually ship a platform-specific `x2md-runtime` resource with the
+locked wheel set already installed.
+
+This keeps the conversion API stable:
+
+```text
+Tauri shell -> Python runtime -> python -m x2md desktop -> local FastAPI UI
+```
+
+The shell may report startup diagnostics, restart the service, and own installer
+packaging, but conversion behavior stays in `src/x2md`.
+
 ## Why Not Split Repositories
 
 Keeping the desktop shell and Python package in one repository keeps releases
