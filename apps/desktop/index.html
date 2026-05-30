@@ -15,7 +15,7 @@
           <span>Desktop</span>
         </div>
       </div>
-      <div class="service-state" data-state="ready">
+      <div class="service-state" id="serviceBadge" data-state="starting">
         <span class="pulse"></span>
         <span id="serviceStatus">桌面壳已启动</span>
       </div>
@@ -26,7 +26,7 @@
         <div class="panel-head">
           <p class="eyebrow">本地文档转换</p>
           <h1>拖入文档，转换成 Markdown</h1>
-          <p>下一步会自动连接本机 x2md 服务。当前界面先用于验证桌面体验和打包流程。</p>
+          <p>应用会在本机启动 x2md 服务，所有文档都在当前电脑处理。服务就绪后会自动进入转换界面。</p>
         </div>
 
         <div class="drop-zone" id="dropZone">
@@ -91,6 +91,17 @@
               <strong id="serviceTitle">等待本地服务接入</strong>
               <p id="serviceHint">后续会在这里显示端口、启动状态和错误日志。</p>
             </div>
+          </div>
+          <div class="command-box" id="commandBox" hidden>
+            <span>启动命令</span>
+            <code id="serviceCommand"></code>
+          </div>
+          <div class="log-panel" id="logPanel" hidden>
+            <div class="log-head">
+              <span>最近日志</span>
+              <button type="button" id="clearLogs">清空</button>
+            </div>
+            <pre id="serviceLogs"></pre>
           </div>
         </section>
       </aside>
