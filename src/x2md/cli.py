@@ -147,6 +147,7 @@ def _backend_options(args: argparse.Namespace) -> BackendOptions:
     mineru_image_analysis = False if args.no_image_analysis else None
     docling_ocr = args.docling_ocr
     docling_force_ocr = args.docling_force_ocr
+    docling_tables = args.docling_tables
     docling_table_mode = args.docling_table_mode
     docling_image_export_mode = args.docling_image_export_mode
     docling_ocr_lang = args.docling_ocr_lang or args.language
@@ -177,6 +178,9 @@ def _backend_options(args: argparse.Namespace) -> BackendOptions:
         docling_ocr = True
         docling_force_ocr = True
 
+    if args.no_table:
+        docling_tables = False
+
     if args.charts is True:
         mineru_image_analysis = True
         docling_image_export_mode = docling_image_export_mode or "referenced"
@@ -203,7 +207,7 @@ def _backend_options(args: argparse.Namespace) -> BackendOptions:
         docling_image_export_mode=docling_image_export_mode,
         docling_ocr=docling_ocr,
         docling_force_ocr=docling_force_ocr,
-        docling_tables=args.docling_tables,
+        docling_tables=docling_tables,
         docling_ocr_engine=args.docling_ocr_engine,
         docling_ocr_lang=docling_ocr_lang,
         docling_table_mode=docling_table_mode,
@@ -216,7 +220,7 @@ def _backend_options(args: argparse.Namespace) -> BackendOptions:
         rapiddoc_parse_method=mineru_method if use_rapiddoc_options else None,
         rapiddoc_start=args.start_page if use_rapiddoc_options else None,
         rapiddoc_end=args.end_page if use_rapiddoc_options else None,
-        rapiddoc_formula=False if use_rapiddoc_options else None,
+        rapiddoc_formula=False if use_rapiddoc_options and (args.quality == "rapid" or args.no_formula) else None,
         rapiddoc_table=False if use_rapiddoc_options and args.no_table else None,
         remove_watermark=args.remove_watermark,
     )

@@ -249,6 +249,30 @@ def test_cli_quality_rapid_uses_rapiddoc(tmp_path, monkeypatch):
     ))]
 
 
+def test_cli_rapiddoc_backend_without_rapid_quality_keeps_formula_default(tmp_path, monkeypatch):
+    src = tmp_path / "input.pdf"
+    out = tmp_path / "out.md"
+    src.write_text("pdf", encoding="utf-8")
+    calls = []
+
+    def fake_convert_file_result(path, backend="markitdown", verbose=True, options=None):
+        calls.append((backend, options))
+        return ConversionResult("# converted")
+
+    monkeypatch.setattr(cli, "convert_file_result", fake_convert_file_result)
+
+    assert cli.main([str(src), "-o", str(out), "--backend", "rapiddoc", "--quality", "balanced"]) == 0
+    assert calls == [("rapiddoc", BackendOptions(
+        mineru_backend="pipeline",
+        mineru_method="txt",
+        mineru_lang="ch",
+        docling_ocr_lang="ch",
+        docling_table_mode="accurate",
+        rapiddoc_lang="ch",
+        rapiddoc_parse_method="txt",
+    ))]
+
+
 def test_cli_page_range_uses_range_capable_backend(tmp_path, monkeypatch):
     src = tmp_path / "input.pdf"
     out = tmp_path / "out.md"
@@ -296,6 +320,34 @@ def test_cli_ocr_flag_forces_ocr(tmp_path, monkeypatch):
         docling_force_ocr=True,
         docling_ocr_lang="ch",
         docling_table_mode="accurate",
+    ))]
+
+
+def test_cli_no_table_applies_to_all_table_capable_backends(tmp_path, monkeypatch):
+    src = tmp_path / "input.pdf"
+    out = tmp_path / "out.md"
+    src.write_text("pdf", encoding="utf-8")
+    calls = []
+
+    def fake_convert_file_result(path, backend="markitdown", verbose=True, options=None):
+        calls.append((backend, options))
+        return ConversionResult("# converted")
+
+    monkeypatch.setattr(cli, "convert_file_result", fake_convert_file_result)
+
+    assert cli.main([str(src), "-o", str(out), "--quality", "rapid", "--no-table"]) == 0
+    assert calls == [("rapiddoc", BackendOptions(
+        mineru_backend="pipeline",
+        mineru_method="txt",
+        mineru_lang="ch",
+        mineru_table=False,
+        docling_tables=False,
+        docling_ocr_lang="ch",
+        docling_table_mode="accurate",
+        rapiddoc_lang="ch",
+        rapiddoc_parse_method="txt",
+        rapiddoc_formula=False,
+        rapiddoc_table=False,
     ))]
 
 
