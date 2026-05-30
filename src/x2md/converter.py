@@ -220,6 +220,7 @@ def _run_rapiddoc_with_progress(path: Path, options: BackendOptions, verbose: bo
 
     result = None
     error = None
+    progress_stream = sys.stderr
 
     def target() -> None:
         nonlocal result, error
@@ -228,15 +229,15 @@ def _run_rapiddoc_with_progress(path: Path, options: BackendOptions, verbose: bo
         except BaseException as e:
             error = e
 
-    sys.stderr.write(f"Converting {display_path.name}")
-    sys.stderr.flush()
+    progress_stream.write(f"Converting {display_path.name}")
+    progress_stream.flush()
     thread = threading.Thread(target=target, daemon=True)
     thread.start()
     while thread.is_alive():
-        sys.stderr.write(".")
-        sys.stderr.flush()
+        progress_stream.write(".")
+        progress_stream.flush()
         thread.join(1)
-    sys.stderr.write(" failed\n" if error is not None else " done\n")
+    progress_stream.write(" failed\n" if error is not None else " done\n")
     if error is not None:
         raise error
     return result
