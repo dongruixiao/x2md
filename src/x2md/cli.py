@@ -81,7 +81,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("-o", "--output", help="output file (single-input mode)")
     p.add_argument("-O", "--output-dir", help="output directory (directory mode)")
     p.add_argument("-r", "--recursive", action="store_true", help="recurse into subdirectories")
-    p.add_argument("--skip-existing", action="store_true", help="skip files whose output Markdown already exists")
+    p.add_argument("--overwrite", action="store_true", help="overwrite existing Markdown outputs in directory mode")
+    p.add_argument("--skip-existing", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("-f", "--format", help="input format for stdin, e.g. 'docx' or '.pdf'")
     p.add_argument("--host", default="127.0.0.1", help=argparse.SUPPRESS)
     p.add_argument("--port", type=int, default=8765, help=argparse.SUPPRESS)
@@ -315,7 +316,7 @@ def _convert_directory(
     backend: Backend,
     verbose: bool,
     options: BackendOptions,
-    skip_existing: bool = False,
+    overwrite: bool = False,
 ) -> int:
     if not root.is_dir():
         print(f"x2md: not a directory: {root}", file=sys.stderr)
@@ -329,7 +330,7 @@ def _convert_directory(
     errors = 0
     for f in files:
         target = targets[f]
-        if skip_existing and target.exists():
+        if not overwrite and target.exists():
             print(f"  {f}  ->  {target} (skipped, exists)", file=sys.stderr)
             continue
         try:
@@ -419,7 +420,7 @@ def main(argv: list[str] | None = None) -> int:
                 backend,
                 not args.quiet,
                 options,
-                args.skip_existing,
+                args.overwrite,
             )
         return _convert_single(args.input, args.output, args.format, backend, not args.quiet, options)
     except ConversionError as e:

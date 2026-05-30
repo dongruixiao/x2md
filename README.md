@@ -42,8 +42,8 @@ x2md report.pdf -o out.md
 x2md slides.pptx > slides.md
 
 # directory (recursive), mirror structure into ./out
-x2md ./docs -r -O ./out
-x2md ./docs -r -O ./out --skip-existing  # only convert files without existing .md output
+x2md ./docs -r -O ./out              # skips existing .md outputs by default
+x2md ./docs -r -O ./out --overwrite  # reconvert and overwrite existing .md outputs
 # same-name inputs are disambiguated: report.docx -> report.md, report.pdf -> report.pdf.md
 
 # URL
@@ -83,6 +83,7 @@ Useful options:
 - `--language ch`: provide a language hint for OCR.
 - `--charts` / `--no-charts`: enable or disable chart and image analysis.
 - `--start-page` / `--end-page`: process only part of a PDF while tuning options.
+- `--overwrite`: in directory mode, reconvert files whose Markdown output already exists.
 
 Web UI:
 

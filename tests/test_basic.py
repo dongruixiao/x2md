@@ -66,7 +66,7 @@ def test_cli_passes_backend_to_converter(tmp_path, monkeypatch):
     assert out.read_text(encoding="utf-8") == "# converted"
 
 
-def test_cli_directory_skip_existing_avoids_reconversion(tmp_path, monkeypatch):
+def test_cli_directory_skips_existing_by_default(tmp_path, monkeypatch):
     root = tmp_path / "input"
     out_dir = tmp_path / "out"
     root.mkdir()
@@ -84,10 +84,51 @@ def test_cli_directory_skip_existing_avoids_reconversion(tmp_path, monkeypatch):
 
     monkeypatch.setattr(cli, "convert_file_result", fake_convert_file_result)
 
-    assert cli.main([str(root), "-O", str(out_dir), "--skip-existing", "--backend", "markitdown"]) == 0
+    assert cli.main([str(root), "-O", str(out_dir), "--backend", "markitdown"]) == 0
     assert calls == [new_src]
     assert (out_dir / "old.md").read_text(encoding="utf-8") == "# existing"
     assert (out_dir / "new.md").read_text(encoding="utf-8") == "# converted new"
+
+
+def test_cli_directory_overwrite_reconverts_existing_outputs(tmp_path, monkeypatch):
+    root = tmp_path / "input"
+    out_dir = tmp_path / "out"
+    root.mkdir()
+    out_dir.mkdir()
+    src = root / "old.pdf"
+    src.write_text("old pdf", encoding="utf-8")
+    (out_dir / "old.md").write_text("# existing", encoding="utf-8")
+    calls = []
+
+    def fake_convert_file_result(path, backend="markitdown", verbose=True, options=None):
+        calls.append(path)
+        return ConversionResult("# overwritten")
+
+    monkeypatch.setattr(cli, "convert_file_result", fake_convert_file_result)
+
+    assert cli.main([str(root), "-O", str(out_dir), "--overwrite", "--backend", "markitdown"]) == 0
+    assert calls == [src]
+    assert (out_dir / "old.md").read_text(encoding="utf-8") == "# overwritten"
+
+
+def test_cli_directory_skip_existing_flag_remains_compatible(tmp_path, monkeypatch):
+    root = tmp_path / "input"
+    out_dir = tmp_path / "out"
+    root.mkdir()
+    out_dir.mkdir()
+    src = root / "old.pdf"
+    src.write_text("old pdf", encoding="utf-8")
+    (out_dir / "old.md").write_text("# existing", encoding="utf-8")
+    calls = []
+
+    def fake_convert_file_result(path, backend="markitdown", verbose=True, options=None):
+        calls.append(path)
+        return ConversionResult("# converted")
+
+    monkeypatch.setattr(cli, "convert_file_result", fake_convert_file_result)
+
+    assert cli.main([str(root), "-O", str(out_dir), "--skip-existing", "--backend", "markitdown"]) == 0
+    assert calls == []
 
 
 def test_cli_directory_disambiguates_same_stem_outputs(tmp_path, monkeypatch):
@@ -110,7 +151,7 @@ def test_cli_directory_disambiguates_same_stem_outputs(tmp_path, monkeypatch):
     assert (out_dir / "report.pdf.md").read_text(encoding="utf-8") == "# converted report.pdf"
 
 
-def test_cli_directory_skip_existing_with_same_stem_converts_unseen_format(tmp_path, monkeypatch):
+def test_cli_directory_default_skip_with_same_stem_converts_unseen_format(tmp_path, monkeypatch):
     root = tmp_path / "input"
     out_dir = tmp_path / "out"
     root.mkdir()
@@ -128,7 +169,7 @@ def test_cli_directory_skip_existing_with_same_stem_converts_unseen_format(tmp_p
 
     monkeypatch.setattr(cli, "convert_file_result", fake_convert_file_result)
 
-    assert cli.main([str(root), "-O", str(out_dir), "--skip-existing", "--backend", "markitdown"]) == 0
+    assert cli.main([str(root), "-O", str(out_dir), "--backend", "markitdown"]) == 0
     assert calls == [pdf]
     assert (out_dir / "report.md").read_text(encoding="utf-8") == "# existing docx"
     assert (out_dir / "report.pdf.md").read_text(encoding="utf-8") == "# converted report.pdf"
