@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::{
     collections::VecDeque,
-    env,
+    env, fs,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
@@ -90,6 +90,16 @@ fn bundled_python_candidates(resource_dir: &Path) -> Vec<PathBuf> {
         vec![
             resource_dir
                 .join("x2md-runtime")
+                .join("python")
+                .join("bin")
+                .join("python3"),
+            resource_dir
+                .join("x2md-runtime")
+                .join("python")
+                .join("bin")
+                .join("python"),
+            resource_dir
+                .join("x2md-runtime")
                 .join("bin")
                 .join("python3"),
             resource_dir.join("x2md-runtime").join("bin").join("python"),
@@ -146,14 +156,23 @@ fn resolve_runtime(app: &tauri::AppHandle) -> RuntimeConfig {
         }
     }
 
+    let working_dir = resource_dir
+        .clone()
+        .or_else(|| compiled_repo_root().map(Path::to_path_buf))
+        .or_else(|| env::current_dir().ok())
+        .unwrap_or_else(|| PathBuf::from("."));
     RuntimeConfig {
         python: fallback_python(),
-        working_dir: resource_dir
-            .or_else(|| compiled_repo_root().map(Path::to_path_buf))
-            .or_else(|| env::current_dir().ok())
-            .unwrap_or_else(|| PathBuf::from(".")),
+        working_dir,
         source: "system".to_string(),
     }
+}
+
+fn model_cache_dir(app: &tauri::AppHandle, runtime: &RuntimeConfig) -> PathBuf {
+    app.path()
+        .app_cache_dir()
+        .unwrap_or_else(|_| runtime.working_dir.join("cache"))
+        .join("models")
 }
 
 fn emit_service_error(app: &tauri::AppHandle, message: impl Into<String>, logs: &[String]) {
@@ -182,6 +201,8 @@ fn stop_x2md_service(app: &tauri::AppHandle) {
 fn launch_x2md_service(app: tauri::AppHandle) {
     thread::spawn(move || {
         let runtime = resolve_runtime(&app);
+        let model_cache = model_cache_dir(&app, &runtime);
+        let _ = fs::create_dir_all(&model_cache);
         let args = SERVICE_ARGS.map(String::from).to_vec();
         let _ = app.emit(
             "x2md-service-starting",
@@ -198,8 +219,15 @@ fn launch_x2md_service(app: tauri::AppHandle) {
             .args(&args)
             .env("PYTHONUNBUFFERED", "1")
             .env("PYTHONUTF8", "1")
+            .env("HF_HOME", &model_cache)
+            .env("MODELSCOPE_CACHE", &model_cache)
+            .env("TORCH_HOME", &model_cache)
+            .env("X2MD_MODEL_CACHE", &model_cache)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        if runtime.source == "bundled" {
+            command.env("X2MD_DESKTOP_LIGHT", "1");
+        }
 
         let mut child = match command.spawn() {
             Ok(child) => child,

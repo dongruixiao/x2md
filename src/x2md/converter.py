@@ -555,6 +555,11 @@ def _convert_file_mineru_result(
 ) -> ConversionResult:
     mineru = _find_executable("mineru")
     if mineru is None:
+        if os.environ.get("X2MD_DESKTOP_LIGHT") == "1":
+            raise ConversionError(
+                "best quality requires MinerU, which is not included in the current lightweight desktop runtime; "
+                "use fast, balanced, or rapid quality, or install the MinerU engine separately"
+            )
         raise ConversionError("best-quality conversion engine is not installed; reinstall x2md")
 
     output_dir = Path(tempfile.mkdtemp(prefix="x2md-mineru-"))

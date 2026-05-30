@@ -42,6 +42,15 @@ src-tauri/target/release/bundle/macos/x2md.app
 src-tauri/target/release/bundle/dmg/x2md_0.1.0_aarch64.dmg
 ```
 
+Build the bundled macOS arm64 Python runtime before creating a customer test
+package:
+
+```bash
+cd apps/desktop
+npm run runtime:build
+npm run build
+```
+
 ## MVP Scope
 
 - start `x2md desktop`;
@@ -72,7 +81,9 @@ The launcher resolves Python in this order:
 The startup panel displays the chosen runtime source, command, and recent
 stderr output. For customer distribution, build a platform-specific
 `x2md-runtime` resource that already contains x2md and the selected conversion
-dependencies.
+dependencies. The first runtime build targets macOS arm64 and installs
+`x2md[desktop]`, which includes fast, balanced, and rapid conversion engines but
+not MinerU/best-quality.
 
 ## Non-Goals For The First Shell
 
@@ -85,8 +96,8 @@ dependencies.
 
 After the shell is working, add:
 
-- embedded Python runtime;
-- locked wheelhouse for x2md and dependencies;
+- Windows runtime packaging;
+- locked wheelhouse for reproducible x2md and dependency installs;
 - model cache location under the user's app data directory;
 - diagnostic log export;
 - optional engine isolation if dependency conflicts become frequent.

@@ -44,6 +44,10 @@ Tauri shell -> Python runtime -> python -m x2md desktop -> local FastAPI UI
 The shell may report startup diagnostics, restart the service, and own installer
 packaging, but conversion behavior stays in `src/x2md`.
 
+The first customer-test runtime is macOS arm64 and installs `x2md[desktop]`:
+fast, balanced, and rapid engines are bundled; MinerU/best-quality stays outside
+the lightweight package until a separate heavy-engine packaging flow exists.
+
 ## Why Not Split Repositories
 
 Keeping the desktop shell and Python package in one repository keeps releases

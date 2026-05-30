@@ -747,6 +747,16 @@ def test_mineru_backend_requires_cli(tmp_path, monkeypatch):
         convert_file(src, "mineru")
 
 
+def test_light_desktop_runtime_explains_missing_mineru(tmp_path, monkeypatch):
+    src = tmp_path / "input.pdf"
+    src.write_text("pdf", encoding="utf-8")
+    monkeypatch.setenv("X2MD_DESKTOP_LIGHT", "1")
+    monkeypatch.setattr("x2md.converter._find_executable", lambda _: None)
+
+    with pytest.raises(ConversionError, match="lightweight desktop runtime"):
+        convert_file(src, "mineru")
+
+
 def test_rapiddoc_backend_uses_python_api_copies_images_and_shows_progress(tmp_path, monkeypatch, capsys):
     src = tmp_path / "input.pdf"
     src.write_text("pdf", encoding="utf-8")

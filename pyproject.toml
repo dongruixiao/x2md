@@ -11,10 +11,8 @@ requires-python = ">=3.10,<3.14"
 license = { text = "MIT" }
 authors = [{ name = "x2md" }]
 dependencies = [
-    "docling",
     "fastapi>=0.110",
     "markitdown[all]>=0.0.1a3",
-    "mineru[pipeline]",
     "python-multipart>=0.0.9",
     "pypdf>=4.0",
     "requests>=2.31",
@@ -26,10 +24,17 @@ dev = [
     "pytest>=8.0",
 ]
 docling = [
+    "docling",
 ]
 mineru = [
+    "mineru[pipeline]",
 ]
 rapiddoc = [
+    "rapid-doc[cpu]==0.9.5",
+    "pdfplumber==0.11.7",
+]
+desktop = [
+    "docling",
     "rapid-doc[cpu]==0.9.5",
     "pdfplumber==0.11.7",
 ]
@@ -39,3 +44,6 @@ x2md = "x2md.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/x2md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
