@@ -223,6 +223,8 @@ fn launch_x2md_service(app: tauri::AppHandle) {
             .env("MODELSCOPE_CACHE", &model_cache)
             .env("TORCH_HOME", &model_cache)
             .env("X2MD_MODEL_CACHE", &model_cache)
+            .env("X2MD_DESKTOP_RUNTIME_SOURCE", &runtime.source)
+            .env("X2MD_DESKTOP_RUNTIME_PYTHON", &runtime.python)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         if runtime.source == "bundled" {

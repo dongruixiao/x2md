@@ -638,6 +638,39 @@ def test_web_app_api_token_protects_desktop_api():
     assert client.get("/api/jobs/missing", headers={"x-x2md-token": "secret"}).status_code == 404
 
 
+def test_web_app_desktop_diagnostics_hidden_without_desktop_token():
+    from fastapi.testclient import TestClient
+
+    client = TestClient(create_app())
+    index = client.get("/")
+
+    assert index.status_code == 200
+    assert 'id="desktopDiagnostics" type="button" hidden' in index.text
+    diagnostics = client.get("/api/desktop-diagnostics").json()
+    assert diagnostics["desktop"] is False
+
+
+def test_web_app_desktop_diagnostics_reports_runtime(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("X2MD_DESKTOP_RUNTIME_SOURCE", "bundled")
+    monkeypatch.setenv("X2MD_DESKTOP_RUNTIME_PYTHON", "/runtime/python")
+    monkeypatch.setenv("X2MD_MODEL_CACHE", "/cache/models")
+    monkeypatch.setenv("X2MD_DESKTOP_LIGHT", "1")
+    client = TestClient(create_app("secret"))
+
+    index = client.get("/")
+    diagnostics = client.get("/api/desktop-diagnostics", headers={"x-x2md-token": "secret"}).json()
+
+    assert index.status_code == 200
+    assert "桌面诊断" in index.text
+    assert diagnostics["desktop"] is True
+    assert diagnostics["runtime_source"] == "bundled"
+    assert diagnostics["runtime_python"] == "/runtime/python"
+    assert diagnostics["model_cache"] == "/cache/models"
+    assert diagnostics["light_runtime"] is True
+
+
 def test_web_job_converts_uploaded_file(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
 

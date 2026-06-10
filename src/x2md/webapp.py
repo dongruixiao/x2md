@@ -271,6 +271,18 @@ def create_app(api_token: str | None = None) -> FastAPI:
         _open_folder(Path(job.output_dir))
         return {"ok": True}
 
+    @app.get("/api/desktop-diagnostics")
+    def desktop_diagnostics() -> dict[str, str | bool | int]:
+        return {
+            "desktop": api_token is not None,
+            "pid": os.getpid(),
+            "python": sys.executable,
+            "runtime_source": os.environ.get("X2MD_DESKTOP_RUNTIME_SOURCE", ""),
+            "runtime_python": os.environ.get("X2MD_DESKTOP_RUNTIME_PYTHON", ""),
+            "model_cache": os.environ.get("X2MD_MODEL_CACHE", ""),
+            "light_runtime": os.environ.get("X2MD_DESKTOP_LIGHT") == "1",
+        }
+
     return app
 
 
@@ -333,6 +345,11 @@ INDEX_HTML = r"""<!doctype html>
       border-bottom: 1px solid var(--line);
     }
     h1 { margin: 0; font-size: 18px; font-weight: 650; }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
     main {
       display: grid;
       grid-template-columns: minmax(0, 1fr) 320px;
@@ -454,6 +471,41 @@ INDEX_HTML = r"""<!doctype html>
       gap: 8px;
       flex-wrap: wrap;
     }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: rgb(15 23 42 / 34%);
+      z-index: 20;
+    }
+    .modal {
+      width: min(620px, 100%);
+      max-height: min(680px, calc(100vh - 48px));
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 18px 48px rgb(15 23 42 / 22%);
+    }
+    .modal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    .modal-head strong { font-size: 16px; }
+    .diagnostics {
+      margin: 0;
+      padding: 16px;
+      color: #344054;
+      font: 12px/1.55 "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
     a { color: var(--accent); text-decoration: none; font-weight: 600; }
     .message {
       max-width: 360px;
@@ -463,6 +515,7 @@ INDEX_HTML = r"""<!doctype html>
       white-space: nowrap;
     }
     .summary { color: var(--muted); }
+    [hidden] { display: none !important; }
     @media (max-width: 860px) {
       main { grid-template-columns: 1fr; }
       header { padding: 0 16px; }
@@ -473,7 +526,10 @@ INDEX_HTML = r"""<!doctype html>
 <body>
   <header>
     <h1>x2md 文档转换工具</h1>
-    <div class="summary" id="summary">等待文件</div>
+    <div class="header-actions">
+      <button id="desktopDiagnostics" type="button" hidden>桌面诊断</button>
+      <div class="summary" id="summary">等待文件</div>
+    </div>
   </header>
   <main>
     <section>
@@ -547,8 +603,18 @@ INDEX_HTML = r"""<!doctype html>
       </div>
     </aside>
   </main>
+  <div class="modal-backdrop" id="diagnosticsModal" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="diagnosticsTitle">
+      <div class="modal-head">
+        <strong id="diagnosticsTitle">桌面诊断</strong>
+        <button id="closeDiagnostics" type="button">关闭</button>
+      </div>
+      <pre class="diagnostics" id="diagnosticsText">正在读取...</pre>
+    </section>
+  </div>
   <script>
     const X2MD_TOKEN = "__X2MD_TOKEN__";
+    const IS_DESKTOP = Boolean(X2MD_TOKEN);
     const state = { files: [], jobId: null, job: null };
     const $ = (id) => document.getElementById(id);
     const rows = $("rows");
@@ -678,6 +744,39 @@ INDEX_HTML = r"""<!doctype html>
       if (!X2MD_TOKEN) return url;
       const separator = url.includes("?") ? "&" : "?";
       return `${url}${separator}x2md_token=${encodeURIComponent(X2MD_TOKEN)}`;
+    }
+
+    async function showDesktopDiagnostics() {
+      $("diagnosticsModal").hidden = false;
+      $("diagnosticsText").textContent = "正在读取...";
+      const response = await apiFetch("/api/desktop-diagnostics");
+      if (!response.ok) {
+        $("diagnosticsText").textContent = await response.text();
+        return;
+      }
+      const data = await response.json();
+      $("diagnosticsText").textContent = [
+        `desktop: ${data.desktop}`,
+        `runtime_source: ${data.runtime_source || "-"}`,
+        `runtime_python: ${data.runtime_python || "-"}`,
+        `python: ${data.python || "-"}`,
+        `pid: ${data.pid}`,
+        `model_cache: ${data.model_cache || "-"}`,
+        `light_runtime: ${data.light_runtime}`,
+      ].join("\\n");
+    }
+
+    if (IS_DESKTOP) {
+      $("desktopDiagnostics").hidden = false;
+      $("desktopDiagnostics").addEventListener("click", showDesktopDiagnostics);
+      $("closeDiagnostics").addEventListener("click", () => {
+        $("diagnosticsModal").hidden = true;
+      });
+      $("diagnosticsModal").addEventListener("click", event => {
+        if (event.target === $("diagnosticsModal")) {
+          $("diagnosticsModal").hidden = true;
+        }
+      });
     }
 
     render();

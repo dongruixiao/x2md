@@ -9,9 +9,6 @@ const serviceCommand = document.querySelector("#serviceCommand");
 const commandBox = document.querySelector("#commandBox");
 const logPanel = document.querySelector("#logPanel");
 const serviceLogs = document.querySelector("#serviceLogs");
-const dropZone = document.querySelector("#dropZone");
-const fileInput = document.querySelector("#fileInput");
-const chooseFiles = document.querySelector("#chooseFiles");
 const retryService = document.querySelector("#retryService");
 const clearLogs = document.querySelector("#clearLogs");
 
@@ -34,11 +31,6 @@ function appendLog(message) {
   logs.push(message);
   if (logs.length > 80) logs.shift();
   renderLogs();
-}
-
-function showSelectedFiles(files) {
-  if (!files.length) return;
-  setServiceState("starting", "已选择文件", `${files.length} 个文件已加入，等待接入转换服务。`);
 }
 
 async function bindServiceEvents() {
@@ -66,6 +58,7 @@ async function bindServiceEvents() {
     const errorLogs = Array.isArray(payload?.logs) ? payload.logs : [];
     errorLogs.forEach(appendLog);
     setServiceState("error", "服务启动失败", message || "本机 x2md 服务没有成功启动。");
+    retryService.hidden = false;
   });
 }
 
@@ -79,9 +72,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
 });
 
-chooseFiles.addEventListener("click", () => fileInput.click());
-fileInput.addEventListener("change", (event) => showSelectedFiles([...event.target.files]));
 retryService.addEventListener("click", async () => {
+  retryService.hidden = true;
   setServiceState("starting", "正在重试连接", "服务接入完成后会自动加载转换界面。");
   try {
     await invoke("restart_x2md_service");
@@ -92,22 +84,4 @@ retryService.addEventListener("click", async () => {
 clearLogs.addEventListener("click", () => {
   logs.length = 0;
   renderLogs();
-});
-
-["dragenter", "dragover"].forEach((name) => {
-  dropZone.addEventListener(name, (event) => {
-    event.preventDefault();
-    dropZone.classList.add("dragging");
-  });
-});
-
-["dragleave", "drop"].forEach((name) => {
-  dropZone.addEventListener(name, (event) => {
-    event.preventDefault();
-    dropZone.classList.remove("dragging");
-  });
-});
-
-dropZone.addEventListener("drop", (event) => {
-  showSelectedFiles([...event.dataTransfer.files]);
 });
