@@ -16,8 +16,13 @@ const LOG_TAIL_LIMIT: usize = 80;
 const SERVICE_READY_ATTEMPTS: usize = 120;
 const SERVICE_READY_INTERVAL: Duration = Duration::from_millis(250);
 
+struct ServiceProcess {
+    child: Option<Child>,
+    generation: u64,
+}
+
 struct ServiceState {
-    child: Mutex<Option<Child>>,
+    process: Mutex<ServiceProcess>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -254,18 +259,42 @@ fn wait_for_service(url: &str) -> Result<(), String> {
 
 fn stop_x2md_service(app: &tauri::AppHandle) {
     let state = app.state::<ServiceState>();
-    let child = state
-        .child
-        .lock()
-        .expect("service child lock poisoned")
-        .take();
+    let child = {
+        let mut process = state.process.lock().expect("service process lock poisoned");
+        process.generation = process.generation.saturating_add(1);
+        process.child.take()
+    };
     if let Some(mut child) = child {
         let _ = child.kill();
         let _ = child.wait();
     }
 }
 
+fn next_service_generation(app: &tauri::AppHandle) -> u64 {
+    let state = app.state::<ServiceState>();
+    let mut process = state.process.lock().expect("service process lock poisoned");
+    process.generation = process.generation.saturating_add(1);
+    process.generation
+}
+
+fn store_service_child(app: &tauri::AppHandle, generation: u64, mut child: Child) -> bool {
+    let state = app.state::<ServiceState>();
+    let mut process = state.process.lock().expect("service process lock poisoned");
+    if process.generation != generation {
+        let _ = child.kill();
+        let _ = child.wait();
+        return false;
+    }
+    if let Some(mut previous) = process.child.take() {
+        let _ = previous.kill();
+        let _ = previous.wait();
+    }
+    process.child = Some(child);
+    true
+}
+
 fn launch_x2md_service(app: tauri::AppHandle) {
+    let generation = next_service_generation(&app);
     thread::spawn(move || {
         let runtime = resolve_runtime(&app);
         let model_cache = model_cache_dir(&app, &runtime);
@@ -292,6 +321,7 @@ fn launch_x2md_service(app: tauri::AppHandle) {
             .env("X2MD_MODEL_CACHE", &model_cache)
             .env("X2MD_DESKTOP_RUNTIME_SOURCE", &runtime.source)
             .env("X2MD_DESKTOP_RUNTIME_PYTHON", &runtime.python)
+            .env("X2MD_DESKTOP_PARENT_PID", std::process::id().to_string())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         if runtime.source == "bundled" {
@@ -323,9 +353,8 @@ fn launch_x2md_service(app: tauri::AppHandle) {
         };
         let stderr = child.stderr.take();
 
-        {
-            let state = app.state::<ServiceState>();
-            *state.child.lock().expect("service child lock poisoned") = Some(child);
+        if !store_service_child(&app, generation, child) {
+            return;
         }
 
         let log_tail = Arc::new(Mutex::new(VecDeque::<String>::new()));
@@ -364,6 +393,7 @@ fn launch_x2md_service(app: tauri::AppHandle) {
                             .cloned()
                             .collect::<Vec<_>>();
                         emit_service_error(&app, error, &logs);
+                        stop_x2md_service(&app);
                         return;
                     }
                     let app_url = format!("{}?x2md_token={}", ready.url, ready.token);
@@ -384,6 +414,7 @@ fn launch_x2md_service(app: tauri::AppHandle) {
                         format!("invalid x2md startup output: {error}: {line}"),
                         &logs,
                     );
+                    stop_x2md_service(&app);
                 }
             },
             Some(Err(error)) => {
@@ -398,6 +429,7 @@ fn launch_x2md_service(app: tauri::AppHandle) {
                     format!("failed to read x2md startup output: {error}"),
                     &logs,
                 );
+                stop_x2md_service(&app);
             }
             None => {
                 let logs = log_tail
@@ -407,6 +439,7 @@ fn launch_x2md_service(app: tauri::AppHandle) {
                     .cloned()
                     .collect::<Vec<_>>();
                 emit_service_error(&app, "x2md exited before reporting a URL", &logs);
+                stop_x2md_service(&app);
             }
         }
     });
@@ -414,6 +447,7 @@ fn launch_x2md_service(app: tauri::AppHandle) {
 
 #[tauri::command]
 fn start_x2md_service(app: tauri::AppHandle) {
+    stop_x2md_service(&app);
     launch_x2md_service(app);
 }
 
@@ -427,7 +461,10 @@ fn restart_x2md_service(app: tauri::AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .manage(ServiceState {
-            child: Mutex::new(None),
+            process: Mutex::new(ServiceProcess {
+                child: None,
+                generation: 0,
+            }),
         })
         .invoke_handler(tauri::generate_handler![
             start_x2md_service,

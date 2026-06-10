@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import json
+import signal
 import shutil
 import socket
 import subprocess
@@ -296,9 +297,40 @@ def _free_port() -> int:
         return int(sock.getsockname()[1])
 
 
+def _pid_exists(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _exit_when_desktop_parent_exits() -> None:
+    raw_pid = os.environ.get("X2MD_DESKTOP_PARENT_PID")
+    if not raw_pid:
+        return
+    try:
+        parent_pid = int(raw_pid)
+    except ValueError:
+        return
+
+    def watch_parent() -> None:
+        while True:
+            if not _pid_exists(parent_pid):
+                os.kill(os.getpid(), signal.SIGTERM)
+                return
+            threading.Event().wait(2)
+
+    threading.Thread(target=watch_parent, daemon=True).start()
+
+
 def run(host: str = "127.0.0.1", port: int = 8765, desktop: bool = False) -> None:
     import uvicorn
 
+    if desktop:
+        _exit_when_desktop_parent_exits()
     if port == 0:
         port = _free_port()
     token = uuid.uuid4().hex if desktop else None
