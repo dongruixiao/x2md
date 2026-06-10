@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="172" y1="120" x2="852" y2="904" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#07111f"/>
+      <stop offset="0.48" stop-color="#0a2240"/>
+      <stop offset="1" stop-color="#101016"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="182" y1="124" x2="842" y2="900" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#29f3ff"/>
+      <stop offset="0.48" stop-color="#1877ff"/>
+      <stop offset="1" stop-color="#ff2d9a"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="16" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.05 0 0 0 0 0.91 0 0 0 0 1 0 0 0 0.85 0"/>
+      <feBlend in="SourceGraphic" mode="screen"/>
+    </filter>
+    <filter id="pinkGlow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="10" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 1 0 0 0 0 0.08 0 0 0 0 0.55 0 0 0 0.8 0"/>
+      <feBlend in="SourceGraphic" mode="screen"/>
+    </filter>
+  </defs>
+
+  <rect x="72" y="72" width="880" height="880" rx="208" fill="url(#bg)"/>
+  <rect x="91" y="91" width="842" height="842" rx="190" fill="none" stroke="url(#edge)" stroke-width="30"/>
+  <path d="M135 730 878 330" stroke="#ff2d9a" stroke-width="24" stroke-linecap="round" opacity="0.9" filter="url(#pinkGlow)"/>
+  <path d="M187 295 294 189h154l-160 165 181 250H314l-97-146-104 146H-28l166-178L-42 189h154l75 106Z" fill="#f8fbff" opacity="0.98" filter="url(#glow)" transform="translate(160 145)"/>
+  <path d="M561 285c0-78 62-132 159-132 96 0 156 52 156 126 0 58-31 100-103 140l-88 49h199v116H531v-83l169-97c40-23 57-45 57-76 0-34-25-57-62-57-41 0-68 28-68 70h-66v-56Z" fill="#29f3ff" filter="url(#glow)"/>
+  <path d="M238 723h83l46 104 48-104h82v181h-58V805l-46 99h-52l-45-99v99h-58V723Zm294 0h89c72 0 119 35 119 91 0 55-47 90-119 90h-89V723Zm64 49v83h23c33 0 55-15 55-41s-22-42-55-42h-23Z" fill="#f8fbff"/>
+  <path d="M168 196h150M704 158h88M776 780h100M136 610h72" stroke="#29f3ff" stroke-width="18" stroke-linecap="round" opacity="0.82"/>
+  <path d="M760 212h116M188 818h120M148 680h58" stroke="#ff2d9a" stroke-width="14" stroke-linecap="round" opacity="0.86"/>
+</svg>
