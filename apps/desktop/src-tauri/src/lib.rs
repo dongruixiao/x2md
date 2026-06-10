@@ -51,7 +51,8 @@ struct RuntimeConfig {
     source: String,
 }
 
-fn compiled_repo_root() -> Option<&'static Path> {
+#[cfg(debug_assertions)]
+fn dev_repo_root() -> Option<&'static Path> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let root = Path::new(manifest_dir)
         .parent()
@@ -59,6 +60,11 @@ fn compiled_repo_root() -> Option<&'static Path> {
         .and_then(|path| path.parent())
         .expect("desktop app must live under apps/desktop/src-tauri");
     root.join("pyproject.toml").exists().then_some(root)
+}
+
+#[cfg(not(debug_assertions))]
+fn dev_repo_root() -> Option<&'static Path> {
+    None
 }
 
 fn env_python() -> Option<PathBuf> {
@@ -148,7 +154,7 @@ fn resolve_runtime(app: &tauri::AppHandle) -> RuntimeConfig {
         }
     }
 
-    if let Some(repo_root) = compiled_repo_root() {
+    if let Some(repo_root) = dev_repo_root() {
         let python = venv_python(repo_root);
         if python.exists() {
             return RuntimeConfig {
@@ -161,7 +167,7 @@ fn resolve_runtime(app: &tauri::AppHandle) -> RuntimeConfig {
 
     let working_dir = resource_dir
         .clone()
-        .or_else(|| compiled_repo_root().map(Path::to_path_buf))
+        .or_else(|| dev_repo_root().map(Path::to_path_buf))
         .or_else(|| env::current_dir().ok())
         .unwrap_or_else(|| PathBuf::from("."));
     RuntimeConfig {
