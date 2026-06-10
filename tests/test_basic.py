@@ -671,6 +671,18 @@ def test_web_app_desktop_diagnostics_reports_runtime(monkeypatch):
     assert diagnostics["light_runtime"] is True
 
 
+def test_web_app_select_output_dir_returns_selected_path(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setattr("x2md.webapp._select_folder", lambda: "/tmp/x2md-out")
+    client = TestClient(create_app("secret"))
+
+    response = client.post("/api/select-output-dir", headers={"x-x2md-token": "secret"})
+
+    assert response.status_code == 200
+    assert response.json() == {"path": "/tmp/x2md-out"}
+
+
 def test_web_job_converts_uploaded_file(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
 

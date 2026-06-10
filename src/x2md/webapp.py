@@ -120,6 +120,63 @@ def _open_folder(path: Path) -> None:
         subprocess.Popen(["xdg-open", str(path)])
 
 
+def _select_folder() -> str:
+    if sys.platform == "darwin":
+        completed = subprocess.run(
+            ["osascript", "-e", 'POSIX path of (choose folder with prompt "选择输出目录")'],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if completed.returncode == 0:
+            return completed.stdout.strip()
+        return ""
+
+    if sys.platform.startswith("win"):
+        script = (
+            "Add-Type -AssemblyName System.Windows.Forms;"
+            "$dialog = New-Object System.Windows.Forms.FolderBrowserDialog;"
+            "$dialog.Description = '选择输出目录';"
+            "$dialog.ShowNewFolderButton = $true;"
+            "if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) "
+            "{ [Console]::WriteLine($dialog.SelectedPath) }"
+        )
+        completed = subprocess.run(
+            ["powershell", "-NoProfile", "-STA", "-Command", script],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if completed.returncode == 0:
+            return completed.stdout.strip()
+        return ""
+
+    for command in (
+        ["zenity", "--file-selection", "--directory", "--title=选择输出目录"],
+        ["kdialog", "--getexistingdirectory", str(Path.home())],
+    ):
+        if shutil.which(command[0]) is None:
+            continue
+        completed = subprocess.run(command, text=True, capture_output=True, check=False)
+        if completed.returncode == 0:
+            return completed.stdout.strip()
+        return ""
+
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+    except Exception as exc:
+        raise HTTPException(500, f"folder picker is unavailable: {exc}") from exc
+
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    try:
+        return filedialog.askdirectory(title="选择输出目录") or ""
+    finally:
+        root.destroy()
+
+
 def _set_job(job: Job) -> None:
     with LOCK:
         JOBS[job.id] = job
@@ -275,6 +332,10 @@ def create_app(api_token: str | None = None) -> FastAPI:
             raise HTTPException(404, "job not found")
         _open_folder(Path(job.output_dir))
         return {"ok": True}
+
+    @app.post("/api/select-output-dir")
+    def select_output_dir() -> dict[str, str]:
+        return {"path": _select_folder()}
 
     @app.get("/api/desktop-diagnostics")
     def desktop_diagnostics() -> dict[str, str | bool | int]:
@@ -507,6 +568,11 @@ INDEX_HTML = r"""<!doctype html>
       gap: 8px;
       flex-wrap: wrap;
     }
+    .input-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+    }
     .modal-backdrop {
       position: fixed;
       inset: 0;
@@ -609,7 +675,10 @@ INDEX_HTML = r"""<!doctype html>
       </div>
       <div class="field">
         <label for="outputDir">输出目录</label>
-        <input id="outputDir" type="text" placeholder="默认保存到用户目录下的 x2md-output">
+        <div class="input-row">
+          <input id="outputDir" type="text" placeholder="默认保存到用户目录下的 x2md-output">
+          <button id="chooseOutputDir" type="button">选择</button>
+        </div>
       </div>
       <div class="field">
         <label for="language">语言</label>
@@ -759,6 +828,23 @@ INDEX_HTML = r"""<!doctype html>
     $("start").addEventListener("click", start);
     $("openFolder").addEventListener("click", () => {
       if (state.jobId) apiFetch(`/api/open-folder/${state.jobId}`, { method: "POST" });
+    });
+    $("chooseOutputDir").addEventListener("click", async () => {
+      const button = $("chooseOutputDir");
+      button.disabled = true;
+      try {
+        const response = await apiFetch("/api/select-output-dir", { method: "POST" });
+        if (!response.ok) {
+          alert(await response.text());
+          return;
+        }
+        const data = await response.json();
+        if (data.path) {
+          $("outputDir").value = data.path;
+        }
+      } finally {
+        button.disabled = false;
+      }
     });
     ["dragenter", "dragover"].forEach(name => drop.addEventListener(name, event => {
       event.preventDefault();
