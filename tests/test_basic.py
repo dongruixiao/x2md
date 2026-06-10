@@ -982,7 +982,6 @@ def test_run_command_progress_uses_display_name(tmp_path, monkeypatch):
 
 def test_build_docling_cmd_includes_useful_options(tmp_path):
     cmd = _build_docling_cmd(
-        "docling",
         tmp_path / "input.pdf",
         tmp_path / "out",
         BackendOptions(
@@ -1004,7 +1003,9 @@ def test_build_docling_cmd_includes_useful_options(tmp_path):
     )
 
     assert cmd == [
-        "docling",
+        sys.executable,
+        "-c",
+        "import sys; sys.argv[0] = 'docling'; from docling.cli.main import app; raise SystemExit(app())",
         str(tmp_path / "input.pdf"),
         "--to",
         "md",

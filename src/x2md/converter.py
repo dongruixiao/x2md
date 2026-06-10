@@ -483,9 +483,17 @@ def _build_mineru_cmd(mineru: str, path: Path, output_dir: Path, options: Backen
     return cmd
 
 
-def _build_docling_cmd(docling: str, path: Path, output_dir: Path, options: BackendOptions) -> list[str]:
+def _docling_cli_launcher() -> list[str]:
+    return [
+        sys.executable,
+        "-c",
+        "import sys; sys.argv[0] = 'docling'; from docling.cli.main import app; raise SystemExit(app())",
+    ]
+
+
+def _build_docling_cmd(path: Path, output_dir: Path, options: BackendOptions) -> list[str]:
     cmd = [
-        docling,
+        *_docling_cli_launcher(),
         str(path),
         "--to",
         "md",
@@ -529,13 +537,12 @@ def _convert_file_docling_cli_result(
     verbose: bool,
     display_path: Path | None = None,
 ) -> ConversionResult:
-    docling = _find_executable("docling")
-    if docling is None:
+    if find_spec("docling.cli.main") is None:
         raise ConversionError("balanced conversion engine is not installed; reinstall x2md")
 
     output_dir = Path(tempfile.mkdtemp(prefix="x2md-docling-"))
     try:
-        cmd = _build_docling_cmd(docling, path, output_dir, options)
+        cmd = _build_docling_cmd(path, output_dir, options)
         _run_command_with_label(cmd, "docling", path, display_path or path, verbose)
         md_path = _find_markdown(output_dir, "docling")
         text = md_path.read_text(encoding="utf-8")
