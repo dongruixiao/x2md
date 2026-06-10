@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "tauri dev",
-    "build": "tauri build",
+    "build": "npm run runtime:sync && tauri build",
     "runtime:build": "python3 ../../scripts/build-desktop-runtime.py",
+    "runtime:sync": "python3 ../../scripts/sync-desktop-runtime.py",
     "web:dev": "vite --host 127.0.0.1 --port 1420",
     "web:build": "vite build"
   },
