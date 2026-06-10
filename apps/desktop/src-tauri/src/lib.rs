@@ -7,11 +7,14 @@ use std::{
     process::{Child, Command, Stdio},
     sync::{Arc, Mutex},
     thread,
+    time::Duration,
 };
 use tauri::{Emitter, Manager};
 
 const SERVICE_ARGS: [&str; 5] = ["-m", "x2md", "desktop", "--port", "0"];
 const LOG_TAIL_LIMIT: usize = 80;
+const SERVICE_READY_ATTEMPTS: usize = 120;
+const SERVICE_READY_INTERVAL: Duration = Duration::from_millis(250);
 
 struct ServiceState {
     child: Mutex<Option<Child>>,
@@ -185,6 +188,65 @@ fn emit_service_error(app: &tauri::AppHandle, message: impl Into<String>, logs: 
     );
 }
 
+fn wait_for_service(url: &str) -> Result<(), String> {
+    let health_url = format!("{}/healthz", url.trim_end_matches('/'));
+    let parsed_url = url::Url::parse(&health_url).map_err(|error| error.to_string())?;
+    let host = parsed_url
+        .host_str()
+        .ok_or_else(|| "service URL has no host".to_string())?
+        .to_string();
+    let port = parsed_url
+        .port_or_known_default()
+        .ok_or_else(|| "service URL has no port".to_string())?;
+    let path = parsed_url.path().to_string();
+    let request =
+        format!("GET {path} HTTP/1.1\r\nHost: {host}:{port}\r\nConnection: close\r\n\r\n");
+    let address = format!("{host}:{port}");
+    let mut last_error = "service did not respond".to_string();
+
+    for _ in 0..SERVICE_READY_ATTEMPTS {
+        match std::net::TcpStream::connect(&address) {
+            Ok(mut stream) => {
+                use std::io::{Read, Write};
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+                let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+                if let Err(error) = stream.write_all(request.as_bytes()) {
+                    last_error = error.to_string();
+                    thread::sleep(SERVICE_READY_INTERVAL);
+                    continue;
+                }
+                let mut response = String::new();
+                match stream.read_to_string(&mut response) {
+                    Ok(_)
+                        if response.starts_with("HTTP/1.1 200")
+                            || response.starts_with("HTTP/1.0 200") =>
+                    {
+                        return Ok(());
+                    }
+                    Ok(_) => {
+                        last_error = response
+                            .lines()
+                            .next()
+                            .unwrap_or("unexpected response")
+                            .to_string();
+                    }
+                    Err(error) => {
+                        last_error = error.to_string();
+                    }
+                }
+            }
+            Err(error) => {
+                last_error = error.to_string();
+            }
+        }
+        thread::sleep(SERVICE_READY_INTERVAL);
+    }
+
+    Err(format!(
+        "x2md service was not ready at {health_url}: {last_error}"
+    ))
+}
+
 fn stop_x2md_service(app: &tauri::AppHandle) {
     let state = app.state::<ServiceState>();
     let child = state
@@ -289,6 +351,16 @@ fn launch_x2md_service(app: tauri::AppHandle) {
         match lines.next() {
             Some(Ok(line)) => match serde_json::from_str::<ServiceReady>(&line) {
                 Ok(ready) => {
+                    if let Err(error) = wait_for_service(&ready.url) {
+                        let logs = log_tail
+                            .lock()
+                            .expect("service log lock poisoned")
+                            .iter()
+                            .cloned()
+                            .collect::<Vec<_>>();
+                        emit_service_error(&app, error, &logs);
+                        return;
+                    }
                     let app_url = format!("{}?x2md_token={}", ready.url, ready.token);
                     if let Some(window) = app.get_webview_window("main") {
                         let _ = window.navigate(url::Url::parse(&app_url).expect("valid x2md URL"));

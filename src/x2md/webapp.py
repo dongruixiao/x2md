@@ -211,6 +211,10 @@ def create_app(api_token: str | None = None) -> FastAPI:
     def index() -> str:
         return INDEX_HTML.replace("__X2MD_TOKEN__", api_token or "")
 
+    @app.get("/healthz")
+    def healthz() -> dict[str, bool]:
+        return {"ok": True}
+
     @app.post("/api/jobs")
     async def create_job(
         files: list[UploadFile] = File(...),
