@@ -14,6 +14,7 @@ from x2md.converter import (
     _build_docling_cmd,
     _build_mineru_cmd,
     _find_executable,
+    _normalize_markdown_line_breaks,
     _run_command_with_label,
     _remove_watermark_text,
     _rewrite_resource_links,
@@ -613,6 +614,39 @@ def test_remove_watermark_text_drops_repeated_date_lines():
     assert "正文第二段" in cleaned
     assert "正文第三段" in cleaned
     assert "赵亮 2025-06-20" not in cleaned
+
+
+def test_normalize_markdown_line_breaks_joins_cjk_pdf_wraps():
+    text = (
+        "上海市经济信息化委关于同意进一步开展上海市电力\n"
+        "需求响应和虚拟电厂工作的批复\n"
+        "\n"
+        "国网上海市电力公司：\n"
+        "\n"
+        "《国网上海市电力公司关于进一步深化电力需求响应和虚拟\n"
+        "\n"
+        "电厂工作的请示》（国网上电司销„2020‟510 号）收悉。根据《中\n"
+        "\n"
+        "共中央、国务院关于进一步深化电力体制改革的若干意见》，\n"
+        "\n"
+        "经研究，批复如下：\n"
+        "\n"
+        "一、同意你公司关于进一步深化电力需求响应和虚拟电厂工\n"
+        "\n"
+        "作的请示。\n"
+        "\n"
+        "— 1 —\n"
+    )
+
+    assert _normalize_markdown_line_breaks(text) == (
+        "上海市经济信息化委关于同意进一步开展上海市电力需求响应和虚拟电厂工作的批复\n"
+        "\n"
+        "国网上海市电力公司：\n"
+        "\n"
+        "《国网上海市电力公司关于进一步深化电力需求响应和虚拟电厂工作的请示》（国网上电司销„2020‟510 号）收悉。根据《中共中央、国务院关于进一步深化电力体制改革的若干意见》，经研究，批复如下：\n"
+        "\n"
+        "一、同意你公司关于进一步深化电力需求响应和虚拟电厂工作的请示。\n"
+    )
 
 
 def test_web_app_serves_index():

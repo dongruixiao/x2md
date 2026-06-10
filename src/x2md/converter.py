@@ -390,6 +390,93 @@ def _remove_watermark_text(text: str) -> str:
     return cleaned
 
 
+def _is_page_number_line(line: str) -> bool:
+    return re.fullmatch(r"[—-]\s*\d+\s*[—-]", line.strip()) is not None
+
+
+def _is_structural_markdown_line(line: str) -> bool:
+    stripped = line.strip()
+    return (
+        not stripped
+        or stripped.startswith(("#", "|", ">", "```", "~~~", "!["))
+        or re.match(r"^\[[^\]]+\]\(", stripped) is not None
+        or re.match(r"^[-*+]\s+", stripped) is not None
+        or re.match(r"^\d+[.)、]\s+", stripped) is not None
+    )
+
+
+def _join_separator(left: str, right: str) -> str:
+    if not left or not right:
+        return ""
+    if re.search(r"[A-Za-z0-9]$", left) and re.match(r"^[A-Za-z0-9]", right):
+        return " "
+    return ""
+
+
+def _looks_like_date_line(line: str) -> bool:
+    return re.fullmatch(r"\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日(?:印发)?", line.strip()) is not None
+
+
+def _should_join_wrapped_lines(left: str, right: str) -> bool:
+    left = left.strip()
+    right = right.strip()
+    if not left or not right:
+        return False
+    if _is_page_number_line(left) or _is_page_number_line(right):
+        return False
+    if _is_structural_markdown_line(left) or _is_structural_markdown_line(right):
+        return False
+    if left.endswith("文件") and len(left) <= 24 and re.search(r"号$", right):
+        return False
+    if re.search(r"号$", left) and len(left) <= 30:
+        return False
+    if _looks_like_date_line(left) or _looks_like_date_line(right):
+        return False
+    if right.startswith("抄送"):
+        return False
+    if left.endswith(("委员会", "办公室")) and len(left) <= 30:
+        return False
+    if right.endswith(("：", ":")) and len(left) <= 60:
+        return False
+    if re.match(r"^[一二三四五六七八九十]+、", right) and left.endswith(("：", ":")):
+        return False
+    if left.endswith(("。", "！", "？", "!", "?", "：", ":")):
+        return False
+    return True
+
+
+def _normalize_markdown_line_breaks(text: str) -> str:
+    lines = text.replace("\f", "\n").splitlines()
+    output: list[str] = []
+    paragraph = ""
+
+    def flush_paragraph() -> None:
+        nonlocal paragraph
+        if paragraph:
+            output.append(paragraph)
+            paragraph = ""
+
+    for raw_line in lines:
+        line = raw_line.rstrip()
+        stripped = line.strip()
+        if _is_page_number_line(stripped):
+            continue
+        if not stripped:
+            continue
+        if _is_structural_markdown_line(stripped):
+            flush_paragraph()
+            output.append(line)
+            continue
+        if paragraph and _should_join_wrapped_lines(paragraph, stripped):
+            paragraph = f"{paragraph}{_join_separator(paragraph, stripped)}{stripped}"
+        else:
+            flush_paragraph()
+            paragraph = stripped
+
+    flush_paragraph()
+    return "\n\n".join(output).strip() + ("\n" if text.endswith("\n") else "")
+
+
 def _find_executable(name: str) -> str | None:
     found = shutil.which(name)
     if found is not None:
@@ -620,7 +707,8 @@ def convert_file_result(
             raise
         result = convert_input(display_path)
 
-    text = _remove_watermark_text(result.text) if options.remove_watermark else result.text
+    text = _normalize_markdown_line_breaks(result.text)
+    text = _remove_watermark_text(text) if options.remove_watermark else text
     return ConversionResult(
         text=text,
         resources=result.resources,
