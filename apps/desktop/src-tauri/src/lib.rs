@@ -83,38 +83,37 @@ fn venv_python(root: &Path) -> PathBuf {
 }
 
 fn bundled_python_candidates(resource_dir: &Path) -> Vec<PathBuf> {
+    let runtime_dirs = [
+        resource_dir.join("x2md-runtime"),
+        resource_dir.join("resources").join("x2md-runtime"),
+    ];
     if cfg!(windows) {
-        vec![
-            resource_dir
-                .join("x2md-runtime")
-                .join("Scripts")
-                .join("python.exe"),
-            resource_dir
-                .join("x2md-runtime")
-                .join("python")
-                .join("python.exe"),
-            resource_dir.join("python").join("python.exe"),
-        ]
+        runtime_dirs
+            .into_iter()
+            .flat_map(|runtime_dir| {
+                [
+                    runtime_dir.join("Scripts").join("python.exe"),
+                    runtime_dir.join("python").join("python.exe"),
+                ]
+            })
+            .chain([resource_dir.join("python").join("python.exe")])
+            .collect()
     } else {
-        vec![
-            resource_dir
-                .join("x2md-runtime")
-                .join("python")
-                .join("bin")
-                .join("python3"),
-            resource_dir
-                .join("x2md-runtime")
-                .join("python")
-                .join("bin")
-                .join("python"),
-            resource_dir
-                .join("x2md-runtime")
-                .join("bin")
-                .join("python3"),
-            resource_dir.join("x2md-runtime").join("bin").join("python"),
-            resource_dir.join("python").join("bin").join("python3"),
-            resource_dir.join("python").join("bin").join("python"),
-        ]
+        runtime_dirs
+            .into_iter()
+            .flat_map(|runtime_dir| {
+                [
+                    runtime_dir.join("python").join("bin").join("python3"),
+                    runtime_dir.join("python").join("bin").join("python"),
+                    runtime_dir.join("bin").join("python3"),
+                    runtime_dir.join("bin").join("python"),
+                ]
+            })
+            .chain([
+                resource_dir.join("python").join("bin").join("python3"),
+                resource_dir.join("python").join("bin").join("python"),
+            ])
+            .collect()
     }
 }
 
