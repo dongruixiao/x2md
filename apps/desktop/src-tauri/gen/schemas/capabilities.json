@@ -1,1 +1,1 @@
-{}
+{"default":{"identifier":"default","description":"Allow the main window to start the local x2md service and receive service status events.","local":true,"windows":["main"],"permissions":["core:event:allow-listen","core:event:allow-unlisten"]}}
